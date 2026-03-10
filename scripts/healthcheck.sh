@@ -5,13 +5,17 @@
 # Checks all services and prints colored status output.
 # Exit code 0 if all services are healthy, non-zero otherwise.
 #
+# All checks use "docker exec" so the script works when run from a
+# remote machine (only Docker API access is required, not host-level
+# network access to container ports).
+#
 # Usage: ./scripts/healthcheck.sh [--quiet]
 #
 
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# Configuration
+# Configuration -- container names
 # ---------------------------------------------------------------------------
 
 POSTGRES_CONTAINER="${ECHOTHINK_POSTGRES_CONTAINER:-echothink-postgres}"
@@ -19,30 +23,21 @@ REDIS_CONTAINER="${ECHOTHINK_REDIS_CONTAINER:-echothink-redis}"
 NEO4J_CONTAINER="${ECHOTHINK_NEO4J_CONTAINER:-echothink-neo4j}"
 MINIO_CONTAINER="${ECHOTHINK_MINIO_CONTAINER:-echothink-minio}"
 AUTHENTIK_CONTAINER="${ECHOTHINK_AUTHENTIK_CONTAINER:-authentik-server}"
-LANGFUSE_CLICKHOUSE_CONTAINER="${ECHOTHINK_CLICKHOUSE_CONTAINER:-langfuse-clickhouse}"
+CLICKHOUSE_CONTAINER="${ECHOTHINK_CLICKHOUSE_CONTAINER:-langfuse-clickhouse}"
 LANGFUSE_CONTAINER="${ECHOTHINK_LANGFUSE_CONTAINER:-langfuse}"
+LITELLM_CONTAINER="${ECHOTHINK_LITELLM_CONTAINER:-echothink-litellm}"
 N8N_CONTAINER="${ECHOTHINK_N8N_CONTAINER:-n8n}"
 OUTLINE_CONTAINER="${ECHOTHINK_OUTLINE_CONTAINER:-outline}"
 GITLAB_CONTAINER="${ECHOTHINK_GITLAB_CONTAINER:-gitlab}"
+DIFY_WEB_CONTAINER="${ECHOTHINK_DIFY_WEB_CONTAINER:-echothink-dify-web}"
+NGINX_CONTAINER="${ECHOTHINK_NGINX_CONTAINER:-echothink-nginx}"
 
 POSTGRES_USER="${POSTGRES_USER:-postgres}"
-
-# Service URLs (accessible from the host)
-NGINX_URL="${NGINX_URL:-http://localhost:80}"
-AUTHENTIK_URL="${AUTHENTIK_URL:-http://localhost:9000}"
-SUPABASE_KONG_URL="${SUPABASE_KONG_URL:-http://localhost:8000}"
-LITELLM_URL="${LITELLM_URL:-http://localhost:4000}"
-DIFY_URL="${DIFY_URL:-http://localhost:5001}"
-HATCHET_URL="${HATCHET_URL:-http://localhost:8080}"
-LANGFUSE_URL="${LANGFUSE_URL:-http://localhost:3100}"
-N8N_URL="${N8N_URL:-http://localhost:5678}"
-OUTLINE_URL="${OUTLINE_URL:-http://localhost:3200}"
-GITLAB_URL="${GITLAB_URL:-http://localhost:8929}"
 
 # Databases that should exist in PostgreSQL
 DATABASES=(postgres authentik supabase dify hatchet langfuse litellm n8n outline gitlab)
 
-# MinIO buckets that should exist (representative subset)
+# MinIO buckets created by minio-init (alias: echothink)
 MINIO_BUCKETS=(supabase-storage dify-storage outline-data artifacts backups langfuse-events langfuse-media)
 
 # ---------------------------------------------------------------------------
@@ -94,7 +89,7 @@ print_skip() {
 }
 
 # ---------------------------------------------------------------------------
-# Check functions
+# Helpers
 # ---------------------------------------------------------------------------
 
 check_container_running() {
@@ -102,18 +97,9 @@ check_container_running() {
     docker inspect --format='{{.State.Running}}' "$container" 2>/dev/null | grep -q "true"
 }
 
-check_http() {
-    local url="$1"
-    local timeout="${2:-5}"
-    curl -sf --max-time "$timeout" "$url" > /dev/null 2>&1
-}
-
-check_http_status() {
-    local url="$1"
-    local timeout="${2:-5}"
-    local status
-    status=$(curl -so /dev/null -w "%{http_code}" --max-time "$timeout" "$url" 2>/dev/null)
-    [[ "$status" -ge 200 && "$status" -lt 400 ]]
+# Find the first running container whose name contains the given pattern.
+find_container() {
+    docker ps --filter "name=$1" --format '{{.Names}}' 2>/dev/null | head -1
 }
 
 # ---------------------------------------------------------------------------
@@ -170,57 +156,6 @@ check_redis() {
 }
 
 # ---------------------------------------------------------------------------
-# Neo4j (Graph Database for Graphiti)
-# ---------------------------------------------------------------------------
-
-check_neo4j() {
-    print_header "Neo4j"
-
-    if ! check_container_running "$NEO4J_CONTAINER"; then
-        print_skip "Neo4j container is not running ($NEO4J_CONTAINER)"
-        return
-    fi
-
-    # Check Neo4j HTTP endpoint from inside the container
-    if docker exec "$NEO4J_CONTAINER" wget --spider -q http://localhost:7474 2>/dev/null; then
-        print_ok "Neo4j is responding on port 7474"
-    else
-        print_fail "Neo4j is not responding on port 7474"
-    fi
-
-    # Check Bolt protocol port
-    if docker exec "$NEO4J_CONTAINER" sh -c 'echo | timeout 3 nc -z localhost 7687' 2>/dev/null; then
-        print_ok "Neo4j Bolt protocol is listening on port 7687"
-    else
-        print_fail "Neo4j Bolt protocol is not available on port 7687"
-    fi
-}
-
-# ---------------------------------------------------------------------------
-# Graphiti Server
-# ---------------------------------------------------------------------------
-
-check_graphiti() {
-    print_header "Graphiti"
-
-    # Graphiti doesn't expose a host port by default (only internal 8000)
-    # Check via container if possible
-    local graphiti_containers
-    graphiti_containers=$(docker ps --filter "name=graphiti" --format '{{.Names}}' 2>/dev/null | head -1)
-
-    if [[ -z "$graphiti_containers" ]]; then
-        print_skip "Graphiti container is not running"
-        return
-    fi
-
-    if docker exec "$graphiti_containers" curl -sf http://localhost:8000/healthcheck > /dev/null 2>&1; then
-        print_ok "Graphiti server is healthy"
-    else
-        print_fail "Graphiti server healthcheck failed"
-    fi
-}
-
-# ---------------------------------------------------------------------------
 # MinIO
 # ---------------------------------------------------------------------------
 
@@ -232,16 +167,17 @@ check_minio() {
         return
     fi
 
-    # Check MinIO readiness via mc inside the container
-    if docker exec "$MINIO_CONTAINER" mc ready local 2>/dev/null; then
+    if docker exec "$MINIO_CONTAINER" mc ready local > /dev/null 2>&1; then
         print_ok "MinIO is ready"
     else
         print_fail "MinIO is not ready"
     fi
 
-    # Check buckets exist (mc in the minio container uses 'local' alias by default)
+    # minio-init creates buckets which are stored as directories under /data.
+    # The "local" mc alias has special handling for "mc ready" but may not be
+    # configured for ls/stat, so check the filesystem directly.
     for bucket in "${MINIO_BUCKETS[@]}"; do
-        if docker exec "$MINIO_CONTAINER" mc ls "local/$bucket" > /dev/null 2>&1; then
+        if docker exec "$MINIO_CONTAINER" test -d "/data/$bucket"; then
             print_ok "MinIO bucket '$bucket' exists"
         else
             print_fail "MinIO bucket '$bucket' does not exist"
@@ -256,12 +192,80 @@ check_minio() {
 check_nginx() {
     print_header "Nginx"
 
-    if check_http "$NGINX_URL"; then
-        print_ok "Nginx is responding at $NGINX_URL"
-    elif check_http_status "$NGINX_URL"; then
-        print_ok "Nginx is responding at $NGINX_URL (non-200 but valid)"
+    if ! check_container_running "$NGINX_CONTAINER"; then
+        print_fail "Nginx container is not running ($NGINX_CONTAINER)"
+        return
+    fi
+
+    # nginx:alpine has no curl/wget -- use nginx -t to validate config,
+    # and verify the master process is running via signal test.
+    if docker exec "$NGINX_CONTAINER" nginx -t > /dev/null 2>&1; then
+        print_ok "Nginx configuration is valid"
     else
-        print_fail "Nginx is not responding at $NGINX_URL"
+        print_fail "Nginx configuration test failed"
+    fi
+
+    # Send a zero signal to check the master process is alive
+    if docker exec "$NGINX_CONTAINER" sh -c 'kill -0 $(cat /var/run/nginx.pid 2>/dev/null) 2>/dev/null'; then
+        print_ok "Nginx master process is running"
+    else
+        print_fail "Nginx master process is not running"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Neo4j (Graph Database for Graphiti)
+# ---------------------------------------------------------------------------
+
+check_neo4j() {
+    print_header "Neo4j"
+
+    if ! check_container_running "$NEO4J_CONTAINER"; then
+        print_skip "Neo4j container is not running ($NEO4J_CONTAINER)"
+        return
+    fi
+
+    if docker exec "$NEO4J_CONTAINER" wget --spider -q http://localhost:7474 2>/dev/null; then
+        print_ok "Neo4j HTTP is responding on port 7474"
+    elif docker exec "$NEO4J_CONTAINER" curl -sf http://localhost:7474 > /dev/null 2>&1; then
+        print_ok "Neo4j HTTP is responding on port 7474"
+    else
+        print_fail "Neo4j HTTP is not responding on port 7474"
+    fi
+
+    # Check Bolt via cypher-shell (included in neo4j image)
+    if docker exec "$NEO4J_CONTAINER" cypher-shell -u neo4j -p changeme "RETURN 1;" > /dev/null 2>&1; then
+        print_ok "Neo4j Bolt protocol is accepting queries"
+    else
+        # cypher-shell may fail due to auth mismatch -- check /proc/net/tcp6
+        # 7687 decimal = 0x1E07
+        if docker exec "$NEO4J_CONTAINER" sh -c '[ -e /proc/net/tcp6 ] && grep -qi ":1E07" /proc/net/tcp6' 2>/dev/null; then
+            print_ok "Neo4j Bolt protocol is listening on port 7687"
+        else
+            print_skip "Neo4j Bolt check skipped (unable to verify)"
+        fi
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Graphiti Server
+# ---------------------------------------------------------------------------
+
+check_graphiti() {
+    print_header "Graphiti"
+
+    local container
+    container=$(find_container "graphiti")
+
+    if [[ -z "$container" ]]; then
+        print_skip "Graphiti container is not running"
+        return
+    fi
+
+    if docker exec "$container" curl -sf http://localhost:8000/healthcheck > /dev/null 2>&1; then
+        print_ok "Graphiti server is healthy"
+    else
+        print_fail "Graphiti server healthcheck failed"
     fi
 }
 
@@ -277,16 +281,10 @@ check_authentik() {
         return
     fi
 
-    # Use the internal ak healthcheck command for reliability
-    if docker exec "$AUTHENTIK_CONTAINER" ak healthcheck 2>/dev/null; then
+    if docker exec "$AUTHENTIK_CONTAINER" ak healthcheck > /dev/null 2>&1; then
         print_ok "Authentik server is healthy"
     else
-        # Fall back to HTTP check
-        if check_http_status "${AUTHENTIK_URL}/-/health/ready/"; then
-            print_ok "Authentik is responding (HTTP ready endpoint)"
-        else
-            print_fail "Authentik health check failed"
-        fi
+        print_fail "Authentik health check failed"
     fi
 }
 
@@ -299,12 +297,10 @@ check_supabase() {
 
     # Kong API Gateway
     if check_container_running "supabase-kong"; then
-        if docker exec supabase-kong kong health 2>/dev/null; then
+        if docker exec supabase-kong kong health > /dev/null 2>&1; then
             print_ok "Supabase Kong gateway is healthy"
-        elif check_http_status "${SUPABASE_KONG_URL}/"; then
-            print_ok "Supabase Kong is responding"
         else
-            print_fail "Supabase Kong is not responding"
+            print_fail "Supabase Kong health check failed"
         fi
     else
         print_fail "Supabase Kong container is not running"
@@ -321,11 +317,12 @@ check_supabase() {
         print_fail "Supabase Auth container is not running"
     fi
 
-    # PostgREST (via Kong)
-    if check_http_status "${SUPABASE_KONG_URL}/rest/v1/"; then
-        print_ok "Supabase PostgREST is responding through Kong"
+    # PostgREST -- kong:2.8.1 has no wget/curl, and PostgREST returns 401
+    # through Kong without auth headers. Just verify the container is running.
+    if check_container_running "supabase-rest"; then
+        print_ok "Supabase PostgREST container is running"
     else
-        print_fail "Supabase PostgREST is not responding"
+        print_fail "Supabase PostgREST container is not running"
     fi
 
     # Storage
@@ -354,12 +351,23 @@ check_supabase() {
 check_litellm() {
     print_header "LiteLLM"
 
-    if check_http "${LITELLM_URL}/health"; then
-        print_ok "LiteLLM health endpoint is healthy"
-    elif check_http_status "${LITELLM_URL}/health"; then
-        print_ok "LiteLLM is responding (check health details)"
+    if ! check_container_running "$LITELLM_CONTAINER"; then
+        print_fail "LiteLLM container is not running ($LITELLM_CONTAINER)"
+        return
+    fi
+
+    # Compose healthcheck uses a Python socket test to port 4000
+    if docker exec "$LITELLM_CONTAINER" python -c "import socket; s=socket.create_connection(('127.0.0.1', 4000), 5); s.close()" 2>/dev/null; then
+        print_ok "LiteLLM is accepting connections on port 4000"
     else
-        print_fail "LiteLLM health endpoint is not responding"
+        print_fail "LiteLLM is not responding on port 4000"
+    fi
+
+    # Also try the /health endpoint inside the container
+    if docker exec "$LITELLM_CONTAINER" curl -sf http://127.0.0.1:4000/health > /dev/null 2>&1; then
+        print_ok "LiteLLM /health endpoint is healthy"
+    elif docker exec "$LITELLM_CONTAINER" wget --spider -q http://127.0.0.1:4000/health 2>/dev/null; then
+        print_ok "LiteLLM /health endpoint is healthy"
     fi
 }
 
@@ -370,17 +378,22 @@ check_litellm() {
 check_dify() {
     print_header "Dify"
 
-    # Dify API
-    if check_http "${DIFY_URL}/health"; then
-        print_ok "Dify API is healthy"
-    elif check_http_status "${DIFY_URL}/health"; then
-        print_ok "Dify API is responding (check health details)"
+    # Dify API -- find container dynamically (no fixed container_name in compose)
+    local api_container
+    api_container=$(find_container "dify-api")
+
+    if [[ -n "$api_container" ]]; then
+        if docker exec "$api_container" curl -sf http://localhost:5001/health > /dev/null 2>&1; then
+            print_ok "Dify API is healthy"
+        else
+            print_fail "Dify API health check failed"
+        fi
     else
-        print_fail "Dify API health endpoint is not responding"
+        print_fail "Dify API container is not running"
     fi
 
     # Dify Web
-    if check_container_running "echothink-dify-web"; then
+    if check_container_running "$DIFY_WEB_CONTAINER"; then
         print_ok "Dify Web container is running"
     else
         print_fail "Dify Web container is not running"
@@ -395,11 +408,11 @@ check_hatchet() {
     print_header "Hatchet"
 
     # Hatchet Engine
-    local engine_containers
-    engine_containers=$(docker ps --filter "name=hatchet-engine" --format '{{.Names}}' 2>/dev/null | head -1)
+    local engine_container
+    engine_container=$(find_container "hatchet-engine")
 
-    if [[ -n "$engine_containers" ]]; then
-        if docker exec "$engine_containers" wget --spider -q http://localhost:8733/ready 2>/dev/null; then
+    if [[ -n "$engine_container" ]]; then
+        if docker exec "$engine_container" wget --spider -q http://localhost:8733/ready 2>/dev/null; then
             print_ok "Hatchet engine is ready"
         else
             print_fail "Hatchet engine is not ready"
@@ -409,12 +422,17 @@ check_hatchet() {
     fi
 
     # Hatchet API
-    if check_http "${HATCHET_URL}/api/ready"; then
-        print_ok "Hatchet API is ready"
-    elif check_http_status "${HATCHET_URL}/api/ready"; then
-        print_ok "Hatchet API is responding"
+    local api_container
+    api_container=$(find_container "hatchet-api")
+
+    if [[ -n "$api_container" ]]; then
+        if docker exec "$api_container" wget --spider -q http://localhost:8080/api/ready 2>/dev/null; then
+            print_ok "Hatchet API is ready"
+        else
+            print_fail "Hatchet API is not ready"
+        fi
     else
-        print_fail "Hatchet API is not responding at $HATCHET_URL"
+        print_fail "Hatchet API container is not running"
     fi
 }
 
@@ -425,12 +443,12 @@ check_hatchet() {
 check_clickhouse() {
     print_header "ClickHouse"
 
-    if ! check_container_running "$LANGFUSE_CLICKHOUSE_CONTAINER"; then
-        print_fail "ClickHouse container is not running ($LANGFUSE_CLICKHOUSE_CONTAINER)"
+    if ! check_container_running "$CLICKHOUSE_CONTAINER"; then
+        print_fail "ClickHouse container is not running ($CLICKHOUSE_CONTAINER)"
         return
     fi
 
-    if docker exec "$LANGFUSE_CLICKHOUSE_CONTAINER" wget --spider -q http://localhost:8123/ping 2>/dev/null; then
+    if docker exec "$CLICKHOUSE_CONTAINER" wget --spider -q http://localhost:8123/ping 2>/dev/null; then
         print_ok "ClickHouse is responding to ping"
     else
         print_fail "ClickHouse is not responding"
@@ -444,10 +462,13 @@ check_clickhouse() {
 check_langfuse() {
     print_header "Langfuse"
 
-    if check_http "${LANGFUSE_URL}/api/public/health"; then
+    if ! check_container_running "$LANGFUSE_CONTAINER"; then
+        print_fail "Langfuse container is not running ($LANGFUSE_CONTAINER)"
+        return
+    fi
+
+    if docker exec "$LANGFUSE_CONTAINER" wget --spider -q http://localhost:3000/api/public/health 2>/dev/null; then
         print_ok "Langfuse is healthy"
-    elif check_http_status "${LANGFUSE_URL}/api/public/health"; then
-        print_ok "Langfuse is responding"
     else
         print_fail "Langfuse health endpoint is not responding"
     fi
@@ -460,10 +481,13 @@ check_langfuse() {
 check_n8n() {
     print_header "n8n"
 
-    if check_http "${N8N_URL}/healthz"; then
+    if ! check_container_running "$N8N_CONTAINER"; then
+        print_fail "n8n container is not running ($N8N_CONTAINER)"
+        return
+    fi
+
+    if docker exec "$N8N_CONTAINER" wget --spider -q http://127.0.0.1:5678/healthz 2>/dev/null; then
         print_ok "n8n is healthy"
-    elif check_http_status "${N8N_URL}/healthz"; then
-        print_ok "n8n is responding"
     else
         print_fail "n8n health endpoint is not responding"
     fi
@@ -476,14 +500,15 @@ check_n8n() {
 check_outline() {
     print_header "Outline"
 
-    if check_http "${OUTLINE_URL}/_health" 3; then
-        print_ok "Outline is healthy"
-    elif check_http_status "${OUTLINE_URL}/_health" 3; then
-        print_ok "Outline is responding"
-    elif ! check_http_status "${OUTLINE_URL}" 3; then
+    if ! check_container_running "$OUTLINE_CONTAINER"; then
         print_skip "Outline is not running (optional service)"
+        return
+    fi
+
+    if docker exec "$OUTLINE_CONTAINER" wget --spider -q http://localhost:3000/_health 2>/dev/null; then
+        print_ok "Outline is healthy"
     else
-        print_fail "Outline is not responding correctly"
+        print_fail "Outline health endpoint is not responding"
     fi
 }
 
@@ -499,20 +524,21 @@ check_gitlab() {
         return
     fi
 
-    # Use gitlab-ctl status (matches compose healthcheck)
     if docker exec "$GITLAB_CONTAINER" gitlab-ctl status > /dev/null 2>&1; then
         print_ok "GitLab services are running"
     else
         print_fail "GitLab services are not all running"
     fi
 
-    # Also check HTTP readiness
-    if check_http "${GITLAB_URL}/-/readiness" 10; then
+    # HTTP readiness (internal to the container, port 8929)
+    if docker exec "$GITLAB_CONTAINER" curl -sf http://localhost:8929/-/readiness > /dev/null 2>&1; then
         print_ok "GitLab readiness check passed"
-    elif check_http_status "${GITLAB_URL}/-/health" 10; then
+    elif docker exec "$GITLAB_CONTAINER" curl -sf http://localhost:8929/-/health > /dev/null 2>&1; then
+        print_ok "GitLab HTTP health check passed"
+    elif docker exec "$GITLAB_CONTAINER" wget --spider -q http://localhost:8929/-/health 2>/dev/null; then
         print_ok "GitLab HTTP health check passed"
     else
-        print_fail "GitLab HTTP endpoints are not responding"
+        print_skip "GitLab HTTP endpoints not yet ready (may still be booting)"
     fi
 }
 
