@@ -467,7 +467,9 @@ check_langfuse() {
         return
     fi
 
-    if docker exec "$LANGFUSE_CONTAINER" wget --spider -q http://localhost:3000/api/public/health 2>/dev/null; then
+    # langfuse/langfuse:3 is a Node.js image -- wget may not be installed.
+    # Use node with fetch (available in Node 18+) to check the health endpoint.
+    if docker exec "$LANGFUSE_CONTAINER" node -e "fetch('http://localhost:3000/api/public/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" 2>/dev/null; then
         print_ok "Langfuse is healthy"
     else
         print_fail "Langfuse health endpoint is not responding"
