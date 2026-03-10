@@ -1,0 +1,15 @@
+# Application layer services
+# Use: docker compose -f docker-compose.yml -f docker-compose.apps.yml up -d
+# Or:  make up-all
+
+include:
+  - services/supabase/docker-compose.supabase.yml
+  - services/authentik/docker-compose.authentik.yml
+  - services/litellm/docker-compose.litellm.yml
+  - services/dify/docker-compose.dify.yml
+  - services/hatchet/docker-compose.hatchet.yml
+  - services/graphiti/docker-compose.graphiti.yml
+  - services/langfuse/docker-compose.langfuse.yml
+  - services/n8n/docker-compose.n8n.yml
+  - services/outline/docker-compose.outline.yml
+  - services/gitlab/docker-compose.gitlab.yml

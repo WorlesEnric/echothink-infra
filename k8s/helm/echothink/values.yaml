@@ -1,0 +1,378 @@
+## ---------------------------------------------------------------------------
+## EchoThink – default (development) values
+## ---------------------------------------------------------------------------
+
+global:
+  domain: echothink.local
+  storageClass: standard
+  imagePullPolicy: IfNotPresent
+  namespace: echothink
+
+# ---------------------------------------------------------------------------
+# PostgreSQL (pgvector)
+# ---------------------------------------------------------------------------
+postgres:
+  image: pgvector/pgvector:pg16
+  replicas: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  storage:
+    size: 20Gi
+  credentials:
+    username: echothink
+    database: echothink
+    ## Reference a Secret for the password – never store plain-text in values
+    existingSecret: ""
+    secretKey: postgres-password
+
+# ---------------------------------------------------------------------------
+# Redis
+# ---------------------------------------------------------------------------
+redis:
+  image: redis:7-alpine
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  storage:
+    size: 5Gi
+  maxmemory: 256mb
+  maxmemoryPolicy: allkeys-lru
+
+# ---------------------------------------------------------------------------
+# MinIO
+# ---------------------------------------------------------------------------
+minio:
+  image: minio/minio:latest
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  storage:
+    size: 50Gi
+  credentials:
+    existingSecret: ""
+    rootUser: minioadmin
+    rootPassword: ""
+    secretKey: minio-password
+  buckets:
+    - name: dify-uploads
+    - name: supabase-storage
+    - name: outline-data
+    - name: gitlab-artifacts
+    - name: langfuse-media
+
+# ---------------------------------------------------------------------------
+# Authentik
+# ---------------------------------------------------------------------------
+authentik:
+  image: ghcr.io/goauthentik/server:latest
+  replicas: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  worker:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  secretKey: ""
+  bootstrapPassword: ""
+  existingSecret: ""
+
+# ---------------------------------------------------------------------------
+# Supabase
+# ---------------------------------------------------------------------------
+supabase:
+  kong:
+    image: kong:3-alpine
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+  gotrue:
+    image: supabase/gotrue:v2
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+  postgrest:
+    image: postgrest/postgrest:v12
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+  realtime:
+    image: supabase/realtime:v2
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+  storage:
+    image: supabase/storage-api:v1
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+  studio:
+    image: supabase/studio:latest
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+  jwtSecret: ""
+  anonKey: ""
+  serviceRoleKey: ""
+  existingSecret: ""
+
+# ---------------------------------------------------------------------------
+# LiteLLM
+# ---------------------------------------------------------------------------
+litellm:
+  image: ghcr.io/berriai/litellm:main-latest
+  replicas: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  masterKey: ""
+  existingSecret: ""
+  hpa:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPU: 70
+  modelConfig: |
+    model_list:
+      - model_name: gpt-4
+        litellm_params:
+          model: openai/gpt-4
+      - model_name: claude-3
+        litellm_params:
+          model: anthropic/claude-3-sonnet
+
+# ---------------------------------------------------------------------------
+# Dify
+# ---------------------------------------------------------------------------
+dify:
+  api:
+    image: langgenius/dify-api:latest
+    replicas: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+  web:
+    image: langgenius/dify-web:latest
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+  worker:
+    image: langgenius/dify-api:latest
+    replicas: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+  sandbox:
+    image: langgenius/dify-sandbox:latest
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+  existingSecret: ""
+  hpa:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPU: 70
+
+# ---------------------------------------------------------------------------
+# Hatchet
+# ---------------------------------------------------------------------------
+hatchet:
+  engine:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-engine:latest
+    replicas: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 512Mi
+  api:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-api:latest
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+  existingSecret: ""
+
+# ---------------------------------------------------------------------------
+# Graphiti + FalkorDB
+# ---------------------------------------------------------------------------
+graphiti:
+  falkordb:
+    image: falkordb/falkordb:latest
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+    storage:
+      size: 10Gi
+  server:
+    image: ghcr.io/getzep/graphiti:latest
+    replicas: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+# ---------------------------------------------------------------------------
+# Langfuse
+# ---------------------------------------------------------------------------
+langfuse:
+  image: langfuse/langfuse:latest
+  replicas: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  existingSecret: ""
+
+# ---------------------------------------------------------------------------
+# n8n
+# ---------------------------------------------------------------------------
+n8n:
+  image: n8nio/n8n:latest
+  replicas: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  storage:
+    size: 5Gi
+  existingSecret: ""
+
+# ---------------------------------------------------------------------------
+# Outline
+# ---------------------------------------------------------------------------
+outline:
+  image: outlinewiki/outline:latest
+  replicas: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  existingSecret: ""
+
+# ---------------------------------------------------------------------------
+# GitLab EE
+# ---------------------------------------------------------------------------
+gitlab:
+  image: gitlab/gitlab-ee:latest
+  resources:
+    requests:
+      cpu: "1"
+      memory: 4Gi
+    limits:
+      cpu: "2"
+      memory: 6Gi
+  storage:
+    size: 50Gi
+  existingSecret: ""
+
+# ---------------------------------------------------------------------------
+# Ingress
+# ---------------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: nginx
+  tls:
+    enabled: false
+    secretName: echothink-tls
+  certManager:
+    enabled: false
+    issuer: letsencrypt-prod
+  annotations: {}

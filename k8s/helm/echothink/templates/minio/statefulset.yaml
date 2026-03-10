@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "echothink.fullname" . }}-minio
+  namespace: {{ include "echothink.namespace" . }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "minio") | nindent 4 }}
+spec:
+  serviceName: {{ include "echothink.fullname" . }}-minio
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "minio") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "echothink.componentLabels" (dict "ctx" . "component" "minio") | nindent 8 }}
+    spec:
+      containers:
+        - name: minio
+          {{- include "echothink.image" (dict "image" .Values.minio.image "policy" .Values.global.imagePullPolicy) | nindent 10 }}
+          command: ["minio", "server", "/data", "--console-address", ":9001"]
+          ports:
+            - containerPort: 9000
+              name: api
+              protocol: TCP
+            - containerPort: 9001
+              name: console
+              protocol: TCP
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.minio.credentials.existingSecret | default (printf "%s-minio" (include "echothink.fullname" .)) }}
+                  key: root-user
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.minio.credentials.existingSecret | default (printf "%s-minio" (include "echothink.fullname" .)) }}
+                  key: root-password
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            {{- toYaml .Values.minio.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: api
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: api
+            initialDelaySeconds: 5
+            periodSeconds: 5
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- include "echothink.storageClass" . | nindent 8 }}
+        resources:
+          requests:
+            storage: {{ .Values.minio.storage.size }}

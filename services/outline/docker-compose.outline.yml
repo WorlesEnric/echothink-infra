@@ -1,0 +1,88 @@
+services:
+  outline:
+    image: outlinewiki/outline:1.5.0
+    container_name: outline
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3200:3000"
+    environment:
+      # PostgreSQL connection
+      DATABASE_URL: postgres://outline_user:${OUTLINE_DB_PASSWORD}@postgres:5432/outline?sslmode=disable
+      DATABASE_CONNECTION_POOL_MIN: "2"
+      DATABASE_CONNECTION_POOL_MAX: "10"
+
+      # Redis connection
+      REDIS_URL: redis://redis:6379
+
+      # Application URL
+      URL: https://outline.${DOMAIN}
+
+      # Security keys
+      SECRET_KEY: ${OUTLINE_SECRET_KEY}
+      UTILS_SECRET: ${OUTLINE_UTILS_SECRET}
+
+      # Authentik OIDC integration
+      OIDC_CLIENT_ID: ${OUTLINE_OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OUTLINE_OIDC_CLIENT_SECRET:-}
+      OIDC_AUTH_URI: https://auth.${DOMAIN}/application/o/authorize/
+      OIDC_TOKEN_URI: https://auth.${DOMAIN}/application/o/token/
+      OIDC_USERINFO_URI: https://auth.${DOMAIN}/application/o/userinfo/
+      OIDC_LOGOUT_URI: https://auth.${DOMAIN}/application/o/outline/end-session/
+      OIDC_DISPLAY_NAME: Authentik
+      OIDC_SCOPES: openid profile email
+
+      # MinIO S3-compatible object storage
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_S3_UPLOAD_BUCKET_URL: http://minio:9000
+      AWS_S3_UPLOAD_BUCKET_NAME: outline-data
+      AWS_S3_FORCE_PATH_STYLE: "true"
+      AWS_S3_ACL: private
+      AWS_REGION: us-east-1
+
+      # File storage configuration
+      FILE_STORAGE: s3
+      FILE_STORAGE_UPLOAD_MAX_SIZE: "26214400"
+
+      # SMTP configuration
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USERNAME: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM_EMAIL: ${SMTP_FROM}
+      SMTP_REPLY_EMAIL: ${SMTP_FROM}
+      SMTP_TLS_CIPHERS: ""
+      SMTP_SECURE: "true"
+
+      # Disable update checks for self-hosted
+      ENABLE_UPDATES: "false"
+
+      # Rate limiter
+      RATE_LIMITER_ENABLED: "true"
+      RATE_LIMITER_REQUESTS: "1000"
+      RATE_LIMITER_DURATION_WINDOW: "60"
+
+      # Logging
+      LOG_LEVEL: info
+    volumes:
+      - outline-data:/var/lib/outline/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - echothink-internal
+      - echothink-public
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/_health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  outline-data:
+    driver: local

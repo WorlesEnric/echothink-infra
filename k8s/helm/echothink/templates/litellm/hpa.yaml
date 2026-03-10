@@ -1,0 +1,23 @@
+{{- if .Values.litellm.hpa.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "echothink.fullname" . }}-litellm
+  namespace: {{ include "echothink.namespace" . }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "litellm") | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "echothink.fullname" . }}-litellm
+  minReplicas: {{ .Values.litellm.hpa.minReplicas }}
+  maxReplicas: {{ .Values.litellm.hpa.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.litellm.hpa.targetCPU }}
+{{- end }}

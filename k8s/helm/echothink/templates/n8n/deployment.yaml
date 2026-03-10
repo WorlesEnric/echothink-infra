@@ -1,0 +1,88 @@
+{{- $fullname := include "echothink.fullname" . -}}
+{{- $namespace := include "echothink.namespace" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-n8n
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "n8n") | nindent 4 }}
+spec:
+  replicas: {{ .Values.n8n.replicas }}
+  selector:
+    matchLabels:
+      {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "n8n") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "echothink.componentLabels" (dict "ctx" . "component" "n8n") | nindent 8 }}
+    spec:
+      containers:
+        - name: n8n
+          {{- include "echothink.image" (dict "image" .Values.n8n.image "policy" .Values.global.imagePullPolicy) | nindent 10 }}
+          ports:
+            - containerPort: 5678
+              name: http
+              protocol: TCP
+          env:
+            - name: DB_TYPE
+              value: postgresdb
+            - name: DB_POSTGRESDB_HOST
+              value: {{ $fullname }}-postgres
+            - name: DB_POSTGRESDB_PORT
+              value: "5432"
+            - name: DB_POSTGRESDB_DATABASE
+              value: n8n
+            - name: DB_POSTGRESDB_USER
+              value: {{ .Values.postgres.credentials.username | quote }}
+            - name: DB_POSTGRESDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.credentials.existingSecret | default (printf "%s-postgres" $fullname) }}
+                  key: {{ .Values.postgres.credentials.secretKey }}
+            - name: N8N_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.n8n.existingSecret | default (printf "%s-n8n" $fullname) }}
+                  key: encryption-key
+            - name: WEBHOOK_URL
+              value: "https://n8n.{{ .Values.global.domain }}/"
+            - name: N8N_HOST
+              value: "n8n.{{ .Values.global.domain }}"
+            - name: N8N_PROTOCOL
+              value: https
+          volumeMounts:
+            - name: data
+              mountPath: /home/node/.n8n
+          resources:
+            {{- toYaml .Values.n8n.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ $fullname }}-n8n
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fullname }}-n8n
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "n8n") | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- include "echothink.storageClass" . | nindent 2 }}
+  resources:
+    requests:
+      storage: {{ .Values.n8n.storage.size }}

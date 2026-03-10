@@ -1,0 +1,39 @@
+{{- $fullname := include "echothink.fullname" . -}}
+{{- $namespace := include "echothink.namespace" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-dify-web
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "dify-web") | nindent 4 }}
+spec:
+  replicas: {{ .Values.dify.web.replicas }}
+  selector:
+    matchLabels:
+      {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "dify-web") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "echothink.componentLabels" (dict "ctx" . "component" "dify-web") | nindent 8 }}
+    spec:
+      containers:
+        - name: dify-web
+          {{- include "echothink.image" (dict "image" .Values.dify.web.image "policy" .Values.global.imagePullPolicy) | nindent 10 }}
+          ports:
+            - containerPort: 3000
+              name: http
+              protocol: TCP
+          env:
+            - name: CONSOLE_API_URL
+              value: "https://dify-api.{{ .Values.global.domain }}"
+            - name: APP_API_URL
+              value: "https://dify-api.{{ .Values.global.domain }}"
+          resources:
+            {{- toYaml .Values.dify.web.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10

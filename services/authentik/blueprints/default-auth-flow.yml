@@ -1,0 +1,93 @@
+version: 1
+metadata:
+  name: EchoThink Default Authentication Flow
+  labels:
+    blueprints.goauthentik.io/description: "Default authentication flow with MFA support"
+    blueprints.goauthentik.io/instantiate: "true"
+
+entries:
+  # ── Stages ──────────────────────────────────────────────────────────
+
+  - model: authentik_stages_identification.identificationstage
+    id: identification-stage
+    attrs:
+      name: echothink-identification-stage
+      user_fields:
+        - username
+        - email
+      case_insensitive_matching: true
+      show_matched_user: true
+      password_stage: !KeyOf password-stage
+      sources:
+        - !Find [authentik_core.source, [name, "authentik Built-in"]]
+
+  - model: authentik_stages_password.passwordstage
+    id: password-stage
+    attrs:
+      name: echothink-password-stage
+      backends:
+        - authentik.core.auth.InbuiltBackend
+        - authentik.core.auth.TokenBackend
+        - authentik.sources.ldap.auth.LDAPBackend
+      failed_attempts_before_cancel: 5
+
+  - model: authentik_stages_authenticator_validate.authenticatorvalidatestage
+    id: totp-validation-stage
+    attrs:
+      name: echothink-mfa-validation-stage
+      device_classes:
+        - totp
+        - webauthn
+        - static
+      not_configured_action: skip
+      last_auth_threshold: hours=8
+
+  - model: authentik_stages_user_login.userloginstage
+    id: user-login-stage
+    attrs:
+      name: echothink-user-login-stage
+      session_duration: seconds=86400
+      remember_me_offset: seconds=2592000
+
+  # ── Flow ────────────────────────────────────────────────────────────
+
+  - model: authentik_flows.flow
+    id: default-authentication-flow
+    attrs:
+      name: EchoThink Authentication
+      title: Sign in to EchoThink
+      slug: echothink-default-authentication-flow
+      designation: authentication
+      authentication: none
+
+  # ── Flow Stage Bindings ─────────────────────────────────────────────
+
+  - model: authentik_flows.flowstagebinding
+    id: binding-identification
+    attrs:
+      target: !KeyOf default-authentication-flow
+      stage: !KeyOf identification-stage
+      order: 10
+
+  - model: authentik_flows.flowstagebinding
+    id: binding-password
+    attrs:
+      target: !KeyOf default-authentication-flow
+      stage: !KeyOf password-stage
+      order: 20
+
+  - model: authentik_flows.flowstagebinding
+    id: binding-totp-validation
+    attrs:
+      target: !KeyOf default-authentication-flow
+      stage: !KeyOf totp-validation-stage
+      order: 30
+      evaluate_on_plan: true
+      re_evaluate_policies: true
+
+  - model: authentik_flows.flowstagebinding
+    id: binding-user-login
+    attrs:
+      target: !KeyOf default-authentication-flow
+      stage: !KeyOf user-login-stage
+      order: 40

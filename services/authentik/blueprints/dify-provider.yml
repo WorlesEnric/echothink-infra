@@ -1,0 +1,74 @@
+version: 1
+metadata:
+  name: EchoThink Dify OAuth2 Provider
+  labels:
+    blueprints.goauthentik.io/description: "OAuth2/OIDC provider for Dify AI platform"
+    blueprints.goauthentik.io/instantiate: "true"
+
+entries:
+  # ── Property Mappings Scope ─────────────────────────────────────────
+
+  - model: authentik_providers_oauth2.scopemapping
+    id: dify-openid-scope
+    attrs:
+      name: dify-openid
+      scope_name: openid
+      expression: |
+        return {
+          "sub": request.user.uid,
+        }
+
+  - model: authentik_providers_oauth2.scopemapping
+    id: dify-email-scope
+    attrs:
+      name: dify-email
+      scope_name: email
+      expression: |
+        return {
+          "email": request.user.email,
+          "email_verified": True,
+        }
+
+  - model: authentik_providers_oauth2.scopemapping
+    id: dify-profile-scope
+    attrs:
+      name: dify-profile
+      scope_name: profile
+      expression: |
+        return {
+          "name": request.user.name,
+          "preferred_username": request.user.username,
+          "groups": [group.name for group in request.user.ak_groups.all()],
+        }
+
+  # ── OAuth2 Provider ─────────────────────────────────────────────────
+
+  - model: authentik_providers_oauth2.oauth2provider
+    id: dify-provider
+    attrs:
+      name: Dify OAuth2 Provider
+      client_id: dify
+      client_type: confidential
+      authorization_flow: !Find [authentik_flows.flow, [slug, "default-provider-authorization-implicit-consent"]]
+      redirect_uris: |
+        https://DOMAIN_PLACEHOLDER/dify/console/api/oauth/callback
+      signing_key: !Find [authentik_crypto.certificatekeypair, [name, "authentik Self-signed Certificate"]]
+      property_mappings:
+        - !KeyOf dify-openid-scope
+        - !KeyOf dify-email-scope
+        - !KeyOf dify-profile-scope
+      sub_mode: user_id
+      token_validity: hours=1
+      access_code_validity: minutes=1
+
+  # ── Application ─────────────────────────────────────────────────────
+
+  - model: authentik_core.application
+    id: dify-application
+    attrs:
+      name: Dify
+      slug: dify
+      provider: !KeyOf dify-provider
+      meta_launch_url: https://DOMAIN_PLACEHOLDER/dify/
+      meta_description: "Dify AI application development platform"
+      policy_engine_mode: any

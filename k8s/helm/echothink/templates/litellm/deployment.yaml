@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "echothink.fullname" . }}-litellm
+  namespace: {{ include "echothink.namespace" . }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "litellm") | nindent 4 }}
+spec:
+  replicas: {{ .Values.litellm.replicas }}
+  selector:
+    matchLabels:
+      {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "litellm") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "echothink.componentLabels" (dict "ctx" . "component" "litellm") | nindent 8 }}
+    spec:
+      containers:
+        - name: litellm
+          {{- include "echothink.image" (dict "image" .Values.litellm.image "policy" .Values.global.imagePullPolicy) | nindent 10 }}
+          ports:
+            - containerPort: 4000
+              name: http
+              protocol: TCP
+          env:
+            - name: LITELLM_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.litellm.existingSecret | default (printf "%s-litellm" (include "echothink.fullname" .)) }}
+                  key: master-key
+            - name: DATABASE_URL
+              value: "postgres://{{ .Values.postgres.credentials.username }}:$(POSTGRES_PASSWORD)@{{ include "echothink.fullname" . }}-postgres:5432/echothink"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.credentials.existingSecret | default (printf "%s-postgres" (include "echothink.fullname" .)) }}
+                  key: {{ .Values.postgres.credentials.secretKey }}
+            - name: REDIS_HOST
+              value: {{ include "echothink.fullname" . }}-redis
+            - name: REDIS_PORT
+              value: "6379"
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+          resources:
+            {{- toYaml .Values.litellm.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "echothink.fullname" . }}-litellm

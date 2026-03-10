@@ -1,0 +1,69 @@
+{{- $fullname := include "echothink.fullname" . -}}
+{{- $namespace := include "echothink.namespace" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-dify-worker
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "dify-worker") | nindent 4 }}
+spec:
+  replicas: {{ .Values.dify.worker.replicas }}
+  selector:
+    matchLabels:
+      {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "dify-worker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "echothink.componentLabels" (dict "ctx" . "component" "dify-worker") | nindent 8 }}
+    spec:
+      containers:
+        - name: dify-worker
+          {{- include "echothink.image" (dict "image" .Values.dify.worker.image "policy" .Values.global.imagePullPolicy) | nindent 10 }}
+          env:
+            - name: MODE
+              value: worker
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.dify.existingSecret | default (printf "%s-dify" $fullname) }}
+                  key: secret-key
+            - name: DB_USERNAME
+              value: {{ .Values.postgres.credentials.username | quote }}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.credentials.existingSecret | default (printf "%s-postgres" $fullname) }}
+                  key: {{ .Values.postgres.credentials.secretKey }}
+            - name: DB_HOST
+              value: {{ $fullname }}-postgres
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_DATABASE
+              value: dify
+            - name: REDIS_HOST
+              value: {{ $fullname }}-redis
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_DB
+              value: "1"
+            - name: CELERY_BROKER_URL
+              value: "redis://{{ $fullname }}-redis:6379/2"
+            - name: STORAGE_TYPE
+              value: s3
+            - name: S3_ENDPOINT
+              value: "http://{{ $fullname }}-minio:9000"
+            - name: S3_BUCKET_NAME
+              value: dify-uploads
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.minio.credentials.existingSecret | default (printf "%s-minio" $fullname) }}
+                  key: root-user
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.minio.credentials.existingSecret | default (printf "%s-minio" $fullname) }}
+                  key: root-password
+          resources:
+            {{- toYaml .Values.dify.worker.resources | nindent 12 }}

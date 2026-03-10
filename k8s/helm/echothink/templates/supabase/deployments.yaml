@@ -1,0 +1,305 @@
+{{- $fullname := include "echothink.fullname" . -}}
+{{- $namespace := include "echothink.namespace" . -}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-supabase-kong
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "supabase-kong") | nindent 4 }}
+spec:
+  replicas: {{ .Values.supabase.kong.replicas }}
+  selector:
+    matchLabels:
+      {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "supabase-kong") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "echothink.componentLabels" (dict "ctx" . "component" "supabase-kong") | nindent 8 }}
+    spec:
+      containers:
+        - name: kong
+          {{- include "echothink.image" (dict "image" .Values.supabase.kong.image "policy" .Values.global.imagePullPolicy) | nindent 10 }}
+          ports:
+            - containerPort: 8000
+              name: proxy
+            - containerPort: 8443
+              name: proxy-ssl
+          env:
+            - name: KONG_DATABASE
+              value: "off"
+            - name: KONG_DECLARATIVE_CONFIG
+              value: /etc/kong/kong.yml
+            - name: KONG_DNS_ORDER
+              value: LAST,A,CNAME
+            - name: KONG_PLUGINS
+              value: request-transformer,cors,key-auth,acl
+          volumeMounts:
+            - name: kong-config
+              mountPath: /etc/kong
+          resources:
+            {{- toYaml .Values.supabase.kong.resources | nindent 12 }}
+      volumes:
+        - name: kong-config
+          configMap:
+            name: {{ $fullname }}-supabase-kong
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-supabase-gotrue
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "supabase-gotrue") | nindent 4 }}
+spec:
+  replicas: {{ .Values.supabase.gotrue.replicas }}
+  selector:
+    matchLabels:
+      {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "supabase-gotrue") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "echothink.componentLabels" (dict "ctx" . "component" "supabase-gotrue") | nindent 8 }}
+    spec:
+      containers:
+        - name: gotrue
+          {{- include "echothink.image" (dict "image" .Values.supabase.gotrue.image "policy" .Values.global.imagePullPolicy) | nindent 10 }}
+          ports:
+            - containerPort: 9999
+              name: http
+          env:
+            - name: GOTRUE_API_HOST
+              value: "0.0.0.0"
+            - name: GOTRUE_API_PORT
+              value: "9999"
+            - name: API_EXTERNAL_URL
+              value: "https://{{ .Values.global.domain }}"
+            - name: GOTRUE_DB_DRIVER
+              value: postgres
+            - name: GOTRUE_DB_DATABASE_URL
+              value: "postgres://{{ .Values.postgres.credentials.username }}:$(POSTGRES_PASSWORD)@{{ $fullname }}-postgres:5432/supabase?sslmode=disable"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.credentials.existingSecret | default (printf "%s-postgres" $fullname) }}
+                  key: {{ .Values.postgres.credentials.secretKey }}
+            - name: GOTRUE_SITE_URL
+              value: "https://{{ .Values.global.domain }}"
+            - name: GOTRUE_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.supabase.existingSecret | default (printf "%s-supabase" $fullname) }}
+                  key: jwt-secret
+            - name: GOTRUE_JWT_EXP
+              value: "3600"
+            - name: GOTRUE_DISABLE_SIGNUP
+              value: "false"
+          resources:
+            {{- toYaml .Values.supabase.gotrue.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-supabase-postgrest
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "supabase-postgrest") | nindent 4 }}
+spec:
+  replicas: {{ .Values.supabase.postgrest.replicas }}
+  selector:
+    matchLabels:
+      {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "supabase-postgrest") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "echothink.componentLabels" (dict "ctx" . "component" "supabase-postgrest") | nindent 8 }}
+    spec:
+      containers:
+        - name: postgrest
+          {{- include "echothink.image" (dict "image" .Values.supabase.postgrest.image "policy" .Values.global.imagePullPolicy) | nindent 10 }}
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: PGRST_DB_URI
+              value: "postgres://{{ .Values.postgres.credentials.username }}:$(POSTGRES_PASSWORD)@{{ $fullname }}-postgres:5432/supabase"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.credentials.existingSecret | default (printf "%s-postgres" $fullname) }}
+                  key: {{ .Values.postgres.credentials.secretKey }}
+            - name: PGRST_DB_SCHEMAS
+              value: public,storage,graphql_public
+            - name: PGRST_DB_ANON_ROLE
+              value: anon
+            - name: PGRST_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.supabase.existingSecret | default (printf "%s-supabase" $fullname) }}
+                  key: jwt-secret
+          resources:
+            {{- toYaml .Values.supabase.postgrest.resources | nindent 12 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-supabase-realtime
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "supabase-realtime") | nindent 4 }}
+spec:
+  replicas: {{ .Values.supabase.realtime.replicas }}
+  selector:
+    matchLabels:
+      {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "supabase-realtime") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "echothink.componentLabels" (dict "ctx" . "component" "supabase-realtime") | nindent 8 }}
+    spec:
+      containers:
+        - name: realtime
+          {{- include "echothink.image" (dict "image" .Values.supabase.realtime.image "policy" .Values.global.imagePullPolicy) | nindent 10 }}
+          ports:
+            - containerPort: 4000
+              name: http
+          env:
+            - name: PORT
+              value: "4000"
+            - name: DB_HOST
+              value: {{ $fullname }}-postgres
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              value: {{ .Values.postgres.credentials.username | quote }}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.credentials.existingSecret | default (printf "%s-postgres" $fullname) }}
+                  key: {{ .Values.postgres.credentials.secretKey }}
+            - name: DB_NAME
+              value: supabase
+            - name: DB_SSL
+              value: "false"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.supabase.existingSecret | default (printf "%s-supabase" $fullname) }}
+                  key: jwt-secret
+            - name: REPLICATION_MODE
+              value: RLS
+            - name: SECURE_CHANNELS
+              value: "true"
+          resources:
+            {{- toYaml .Values.supabase.realtime.resources | nindent 12 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-supabase-storage
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "supabase-storage") | nindent 4 }}
+spec:
+  replicas: {{ .Values.supabase.storage.replicas }}
+  selector:
+    matchLabels:
+      {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "supabase-storage") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "echothink.componentLabels" (dict "ctx" . "component" "supabase-storage") | nindent 8 }}
+    spec:
+      containers:
+        - name: storage
+          {{- include "echothink.image" (dict "image" .Values.supabase.storage.image "policy" .Values.global.imagePullPolicy) | nindent 10 }}
+          ports:
+            - containerPort: 5000
+              name: http
+          env:
+            - name: ANON_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.supabase.existingSecret | default (printf "%s-supabase" $fullname) }}
+                  key: anon-key
+            - name: SERVICE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.supabase.existingSecret | default (printf "%s-supabase" $fullname) }}
+                  key: service-role-key
+            - name: POSTGREST_URL
+              value: "http://{{ $fullname }}-supabase-postgrest:3000"
+            - name: PGRST_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.supabase.existingSecret | default (printf "%s-supabase" $fullname) }}
+                  key: jwt-secret
+            - name: DATABASE_URL
+              value: "postgres://{{ .Values.postgres.credentials.username }}:$(POSTGRES_PASSWORD)@{{ $fullname }}-postgres:5432/supabase"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.credentials.existingSecret | default (printf "%s-postgres" $fullname) }}
+                  key: {{ .Values.postgres.credentials.secretKey }}
+            - name: STORAGE_BACKEND
+              value: s3
+            - name: STORAGE_S3_BUCKET
+              value: supabase-storage
+            - name: STORAGE_S3_ENDPOINT
+              value: "http://{{ $fullname }}-minio:9000"
+            - name: STORAGE_S3_FORCE_PATH_STYLE
+              value: "true"
+            - name: STORAGE_S3_REGION
+              value: us-east-1
+          resources:
+            {{- toYaml .Values.supabase.storage.resources | nindent 12 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-supabase-studio
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "supabase-studio") | nindent 4 }}
+spec:
+  replicas: {{ .Values.supabase.studio.replicas }}
+  selector:
+    matchLabels:
+      {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "supabase-studio") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "echothink.componentLabels" (dict "ctx" . "component" "supabase-studio") | nindent 8 }}
+    spec:
+      containers:
+        - name: studio
+          {{- include "echothink.image" (dict "image" .Values.supabase.studio.image "policy" .Values.global.imagePullPolicy) | nindent 10 }}
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: STUDIO_PG_META_URL
+              value: "http://{{ $fullname }}-supabase-postgrest:3000"
+            - name: SUPABASE_URL
+              value: "http://{{ $fullname }}-supabase-kong:8000"
+            - name: SUPABASE_REST_URL
+              value: "http://{{ $fullname }}-supabase-kong:8000/rest/v1/"
+            - name: SUPABASE_ANON_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.supabase.existingSecret | default (printf "%s-supabase" $fullname) }}
+                  key: anon-key
+            - name: SUPABASE_SERVICE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.supabase.existingSecret | default (printf "%s-supabase" $fullname) }}
+                  key: service-role-key
+          resources:
+            {{- toYaml .Values.supabase.studio.resources | nindent 12 }}

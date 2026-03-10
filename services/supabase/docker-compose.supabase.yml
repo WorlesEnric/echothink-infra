@@ -1,0 +1,247 @@
+services:
+  supabase-kong:
+    image: kong:2.8.1
+    container_name: supabase-kong
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+      - "8443:8443"
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /tmp/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl,jwt
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
+      KONG_STATUS_LISTEN: "0.0.0.0:8100"
+    volumes:
+      - ./volumes/kong.yml:/var/lib/kong/kong.yml:ro
+    command: >
+      /bin/sh -ec 'sed
+      -e "s|SUPABASE_ANON_KEY_PLACEHOLDER|$${SUPABASE_ANON_KEY}|g"
+      -e "s|SUPABASE_SERVICE_ROLE_KEY_PLACEHOLDER|$${SUPABASE_SERVICE_ROLE_KEY}|g"
+      /var/lib/kong/kong.yml > /tmp/kong.yml;
+      exec /docker-entrypoint.sh kong docker-start'
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      supabase-auth:
+        condition: service_healthy
+      supabase-rest:
+        condition: service_started
+      supabase-realtime:
+        condition: service_started
+      supabase-storage:
+        condition: service_healthy
+    networks:
+      - echothink-internal
+      - echothink-public
+
+  supabase-auth:
+    image: supabase/gotrue:v2.186.0
+    container_name: supabase-auth
+    restart: unless-stopped
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: ${SUPABASE_PUBLIC_URL:-http://localhost:8000}
+
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://${SUPABASE_DB_USER:-supabase_admin}:${SUPABASE_DB_PASSWORD}@${SUPABASE_DB_HOST:-postgres}:${SUPABASE_DB_PORT:-5432}/${SUPABASE_DB_NAME:-supabase}?sslmode=disable&search_path=auth
+
+      GOTRUE_SITE_URL: ${SUPABASE_SITE_URL:-http://localhost:3000}
+      GOTRUE_URI_ALLOW_LIST: ${SUPABASE_ADDITIONAL_REDIRECT_URLS:-}
+      GOTRUE_DISABLE_SIGNUP: ${SUPABASE_DISABLE_SIGNUP:-false}
+
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+
+      # Authentik OIDC integration
+      GOTRUE_EXTERNAL_AUTHENTIK_ENABLED: ${SUPABASE_OAUTH_ENABLED:-false}
+      GOTRUE_EXTERNAL_AUTHENTIK_CLIENT_ID: ${SUPABASE_OAUTH_CLIENT_ID:-supabase}
+      GOTRUE_EXTERNAL_AUTHENTIK_SECRET: ${SUPABASE_OAUTH_CLIENT_SECRET:-}
+      GOTRUE_EXTERNAL_AUTHENTIK_REDIRECT_URI: ${SUPABASE_PUBLIC_URL:-http://localhost:8000}/auth/v1/callback
+      GOTRUE_EXTERNAL_AUTHENTIK_URL: ${AUTHENTIK_URL:-http://authentik-server:9000}/application/o/supabase/
+
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_SMS_AUTOCONFIRM: "true"
+
+      GOTRUE_RATE_LIMIT_HEADER: X-Forwarded-For
+      GOTRUE_RATE_LIMIT_EMAIL_SENT: 100
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - echothink-internal
+
+  supabase-rest:
+    image: postgrest/postgrest:v14.5
+    container_name: supabase-rest
+    restart: unless-stopped
+    environment:
+      PGRST_DB_URI: postgres://${SUPABASE_DB_USER:-supabase_admin}:${SUPABASE_DB_PASSWORD}@${SUPABASE_DB_HOST:-postgres}:${SUPABASE_DB_PORT:-5432}/${SUPABASE_DB_NAME:-supabase}
+      PGRST_DB_SCHEMAS: ${PGRST_DB_SCHEMAS:-public,graphql}
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      PGRST_APP_SETTINGS_JWT_EXP: 3600
+      PGRST_DB_EXTRA_SEARCH_PATH: public,extensions
+      PGRST_SERVER_PORT: 3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - echothink-internal
+
+  supabase-realtime:
+    image: supabase/realtime:v2.76.5
+    container_name: supabase-realtime
+    restart: unless-stopped
+    environment:
+      PORT: 4000
+      DB_HOST: ${SUPABASE_DB_HOST:-postgres}
+      DB_PORT: ${SUPABASE_DB_PORT:-5432}
+      DB_USER: ${SUPABASE_DB_USER:-supabase_admin}
+      DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
+      DB_NAME: ${SUPABASE_DB_NAME:-supabase}
+      DB_AFTER_CONNECT_QUERY: "SET search_path TO _realtime"
+      DB_ENC_KEY: ${SUPABASE_REALTIME_ENC_KEY:-supabaserealtime}
+      API_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      SECRET_KEY_BASE: ${SUPABASE_REALTIME_SECRET_KEY_BASE}
+      ERL_AFLAGS: "-proto_dist inet_tcp"
+      ENABLE_TAILSCALE: "false"
+      DNS_NODES: "''"
+      RLIMIT_NOFILE: 10000
+      APP_NAME: realtime
+      SEED_SELF_HOST: "true"
+      MAX_HEADER_LENGTH: 4096
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - echothink-internal
+
+  supabase-storage:
+    image: supabase/storage-api:v1.37.8
+    container_name: supabase-storage
+    restart: unless-stopped
+    environment:
+      ANON_KEY: ${SUPABASE_ANON_KEY}
+      SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      POSTGREST_URL: http://supabase-rest:3000
+      PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      DATABASE_URL: postgres://${SUPABASE_DB_USER:-supabase_admin}:${SUPABASE_DB_PASSWORD}@${SUPABASE_DB_HOST:-postgres}:${SUPABASE_DB_PORT:-5432}/${SUPABASE_DB_NAME:-supabase}
+      FILE_SIZE_LIMIT: 52428800
+      STORAGE_BACKEND: s3
+      GLOBAL_S3_BUCKET: ${SUPABASE_STORAGE_S3_BUCKET:-supabase-storage}
+      GLOBAL_S3_ENDPOINT: ${SUPABASE_STORAGE_S3_ENDPOINT:-http://minio:9000}
+      GLOBAL_S3_FORCE_PATH_STYLE: "true"
+      GLOBAL_S3_PROTOCOL: http
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_DEFAULT_REGION: ${SUPABASE_STORAGE_S3_REGION:-us-east-1}
+      TENANT_ID: stub
+      REGION: ${SUPABASE_STORAGE_S3_REGION:-us-east-1}
+      IS_MULTITENANT: "false"
+      ENABLE_IMAGE_TRANSFORMATION: "true"
+      IMGPROXY_URL: http://supabase-imgproxy:5001
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:5000/status"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      supabase-rest:
+        condition: service_started
+      supabase-imgproxy:
+        condition: service_started
+    networks:
+      - echothink-internal
+
+  supabase-studio:
+    image: supabase/studio:2026.02.16-sha-26c615c
+    container_name: supabase-studio
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      STUDIO_PG_META_URL: http://supabase-meta:8080
+      POSTGRES_PASSWORD: ${SUPABASE_DB_PASSWORD}
+      DEFAULT_ORGANIZATION_NAME: ${SUPABASE_STUDIO_ORG:-EchoThink}
+      DEFAULT_PROJECT_NAME: ${SUPABASE_STUDIO_PROJECT:-EchoThink Platform}
+      SUPABASE_URL: http://supabase-kong:8000
+      SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL:-http://localhost:8000}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      AUTH_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      LOGFLARE_API_KEY: ${SUPABASE_LOGFLARE_API_KEY:-placeholder}
+      LOGFLARE_URL: http://localhost:4000
+      NEXT_PUBLIC_ENABLE_LOGS: "true"
+      NEXT_ANALYTICS_BACKEND_PROVIDER: postgres
+    depends_on:
+      supabase-kong:
+        condition: service_healthy
+    networks:
+      - echothink-internal
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://' + process.env.HOSTNAME + ':3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  supabase-imgproxy:
+    image: darthsim/imgproxy:v3.8.0
+    container_name: supabase-imgproxy
+    restart: unless-stopped
+    environment:
+      IMGPROXY_BIND: :5001
+      IMGPROXY_LOCAL_FILESYSTEM_ROOT: /
+      IMGPROXY_USE_ETAG: "true"
+      IMGPROXY_ENABLE_WEBP_DETECTION: "true"
+    healthcheck:
+      test: ["CMD", "imgproxy", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - echothink-internal
+
+  supabase-meta:
+    image: supabase/postgres-meta:v0.95.2
+    container_name: supabase-meta
+    restart: unless-stopped
+    environment:
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: ${SUPABASE_DB_HOST:-postgres}
+      PG_META_DB_PORT: ${SUPABASE_DB_PORT:-5432}
+      PG_META_DB_NAME: ${SUPABASE_DB_NAME:-supabase}
+      PG_META_DB_USER: ${SUPABASE_DB_USER:-supabase_admin}
+      PG_META_DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - echothink-internal
+
+volumes:
+  supabase-storage-data:
+    driver: local

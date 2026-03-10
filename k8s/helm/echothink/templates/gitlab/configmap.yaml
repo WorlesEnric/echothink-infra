@@ -1,0 +1,38 @@
+{{- $fullname := include "echothink.fullname" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullname }}-gitlab
+  namespace: {{ include "echothink.namespace" . }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "gitlab") | nindent 4 }}
+data:
+  omnibus-config: |
+    external_url 'https://gitlab.{{ .Values.global.domain }}'
+    nginx['listen_port'] = 80
+    nginx['listen_https'] = false
+    nginx['proxy_set_headers'] = {
+      "X-Forwarded-Proto" => "https",
+      "X-Forwarded-Ssl" => "on"
+    }
+    postgresql['enable'] = false
+    gitlab_rails['db_adapter'] = 'postgresql'
+    gitlab_rails['db_encoding'] = 'unicode'
+    gitlab_rails['db_host'] = '{{ $fullname }}-postgres'
+    gitlab_rails['db_port'] = 5432
+    gitlab_rails['db_database'] = 'gitlab'
+    gitlab_rails['db_username'] = '{{ .Values.postgres.credentials.username }}'
+    redis['enable'] = false
+    gitlab_rails['redis_host'] = '{{ $fullname }}-redis'
+    gitlab_rails['redis_port'] = 6379
+    gitlab_rails['redis_database'] = 4
+    gitlab_rails['object_store']['enabled'] = true
+    gitlab_rails['object_store']['connection'] = {
+      'provider' => 'AWS',
+      'endpoint' => 'http://{{ $fullname }}-minio:9000',
+      'path_style' => true,
+      'region' => 'us-east-1'
+    }
+    gitlab_rails['object_store']['objects']['artifacts']['bucket'] = 'gitlab-artifacts'
+    prometheus_monitoring['enable'] = false
+    grafana['enable'] = false

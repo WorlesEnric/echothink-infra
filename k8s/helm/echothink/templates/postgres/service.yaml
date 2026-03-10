@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "echothink.fullname" . }}-postgres
+  namespace: {{ include "echothink.namespace" . }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "postgres") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: postgres
+      protocol: TCP
+      name: postgres
+  selector:
+    {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "postgres") | nindent 4 }}

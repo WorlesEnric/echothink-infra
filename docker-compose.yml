@@ -1,0 +1,88 @@
+name: echothink
+
+include:
+  - services/minio/docker-compose.minio.yml
+
+services:
+  postgres:
+    build:
+      context: ./services/postgres
+      dockerfile: Dockerfile
+    container_name: echothink-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - echothink-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    shm_size: 256m
+
+  redis:
+    image: redis:8.6.1-alpine
+    container_name: echothink-redis
+    restart: unless-stopped
+    command: redis-server /usr/local/etc/redis/redis.conf
+    volumes:
+      - redis-data:/data
+      - ./services/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - echothink-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  nginx:
+    image: nginx:1.29.5-alpine
+    container_name: echothink-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./services/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./services/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./services/nginx/ssl:/etc/nginx/ssl:ro
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    command: >
+      /bin/sh -ec 'mkdir -p /tmp/nginx-conf.d;
+      envsubst "$$DOMAIN" < /etc/nginx/nginx.conf > /tmp/nginx.conf;
+      sed -i "s#/etc/nginx/conf.d#/tmp/nginx-conf.d#g" /tmp/nginx.conf;
+      for f in /etc/nginx/conf.d/*.conf; do
+        envsubst "$$DOMAIN" < "$$f" > "/tmp/nginx-conf.d/$$(basename "$$f")";
+      done;
+      exec nginx -c /tmp/nginx.conf -g "daemon off;"'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - echothink-internal
+      - echothink-public
+
+networks:
+  echothink-internal:
+    driver: bridge
+    internal: true
+  echothink-public:
+    driver: bridge
+
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  minio-data:
+    driver: local

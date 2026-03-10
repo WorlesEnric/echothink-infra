@@ -1,0 +1,136 @@
+{{- $fullname := include "echothink.fullname" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullname }}-supabase-kong
+  namespace: {{ include "echothink.namespace" . }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "supabase-kong") | nindent 4 }}
+data:
+  kong.yml: |
+    _format_version: "2.1"
+    _transform: true
+
+    services:
+      - name: auth-v1-open
+        url: http://{{ $fullname }}-supabase-gotrue:9999/verify
+        routes:
+          - name: auth-v1-open
+            strip_path: true
+            paths:
+              - /auth/v1/verify
+        plugins:
+          - name: cors
+
+      - name: auth-v1-open-callback
+        url: http://{{ $fullname }}-supabase-gotrue:9999/callback
+        routes:
+          - name: auth-v1-open-callback
+            strip_path: true
+            paths:
+              - /auth/v1/callback
+        plugins:
+          - name: cors
+
+      - name: auth-v1-open-authorize
+        url: http://{{ $fullname }}-supabase-gotrue:9999/authorize
+        routes:
+          - name: auth-v1-open-authorize
+            strip_path: true
+            paths:
+              - /auth/v1/authorize
+        plugins:
+          - name: cors
+
+      - name: auth-v1
+        _comment: GoTrue
+        url: http://{{ $fullname }}-supabase-gotrue:9999/
+        routes:
+          - name: auth-v1-all
+            strip_path: true
+            paths:
+              - /auth/v1/
+        plugins:
+          - name: cors
+          - name: key-auth
+            config:
+              hide_credentials: false
+          - name: acl
+            config:
+              hide_groups_header: true
+              allow:
+                - admin
+                - anon
+
+      - name: rest-v1
+        _comment: PostgREST
+        url: http://{{ $fullname }}-supabase-postgrest:3000/
+        routes:
+          - name: rest-v1-all
+            strip_path: true
+            paths:
+              - /rest/v1/
+        plugins:
+          - name: cors
+          - name: key-auth
+            config:
+              hide_credentials: true
+          - name: acl
+            config:
+              hide_groups_header: true
+              allow:
+                - admin
+                - anon
+
+      - name: realtime-v1
+        _comment: Realtime
+        url: http://{{ $fullname }}-supabase-realtime:4000/socket/
+        routes:
+          - name: realtime-v1-all
+            strip_path: true
+            paths:
+              - /realtime/v1/
+        plugins:
+          - name: cors
+          - name: key-auth
+            config:
+              hide_credentials: false
+          - name: acl
+            config:
+              hide_groups_header: true
+              allow:
+                - admin
+                - anon
+
+      - name: storage-v1
+        _comment: Storage
+        url: http://{{ $fullname }}-supabase-storage:5000/
+        routes:
+          - name: storage-v1-all
+            strip_path: true
+            paths:
+              - /storage/v1/
+        plugins:
+          - name: cors
+          - name: key-auth
+            config:
+              hide_credentials: false
+          - name: acl
+            config:
+              hide_groups_header: true
+              allow:
+                - admin
+                - anon
+
+    consumers:
+      - username: anon
+        keyauth_credentials:
+          - key: "{{ "{{" }} .Values.supabase.anonKey | default \"changeme-anon-key\" {{ "}}" }}"
+        acls:
+          - group: anon
+
+      - username: service_role
+        keyauth_credentials:
+          - key: "{{ "{{" }} .Values.supabase.serviceRoleKey | default \"changeme-service-role-key\" {{ "}}" }}"
+        acls:
+          - group: admin

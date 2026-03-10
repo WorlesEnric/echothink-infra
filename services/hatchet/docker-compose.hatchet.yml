@@ -1,0 +1,117 @@
+services:
+  hatchet-setup:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-migrate:v0.79.32
+    environment:
+      DATABASE_URL: postgres://${HATCHET_DB_USER:-hatchet_user}:${HATCHET_DB_PASSWORD}@postgres:5432/hatchet?sslmode=disable
+    command: /hatchet/hatchet-migrate
+    networks:
+      - echothink-internal
+
+  hatchet-config:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-admin:v0.79.32
+    command: /hatchet/hatchet-admin quickstart --skip certs --generated-config-dir /hatchet/config --overwrite=false
+    environment:
+      DATABASE_URL: postgres://${HATCHET_DB_USER:-hatchet_user}:${HATCHET_DB_PASSWORD}@postgres:5432/hatchet?sslmode=disable
+      SERVER_MSGQUEUE_KIND: postgres
+      SERVER_AUTH_COOKIE_DOMAIN: hatchet.${DOMAIN}
+      SERVER_AUTH_COOKIE_INSECURE: "false"
+      SERVER_GRPC_BIND_ADDRESS: 0.0.0.0
+      SERVER_GRPC_INSECURE: "true"
+      SERVER_GRPC_BROADCAST_ADDRESS: hatchet-engine:7070
+      SERVER_DEFAULT_ENGINE_VERSION: V1
+      SERVER_INTERNAL_CLIENT_INTERNAL_GRPC_BROADCAST_ADDRESS: hatchet-engine:7070
+    depends_on:
+      hatchet-setup:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    volumes:
+      - hatchet-certs:/hatchet/certs
+      - hatchet-config:/hatchet/config
+    networks:
+      - echothink-internal
+
+  hatchet-engine:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-engine:v0.79.32
+    command: /hatchet/hatchet-engine --config /hatchet/config
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${HATCHET_DB_USER:-hatchet_user}:${HATCHET_DB_PASSWORD}@postgres:5432/hatchet?sslmode=disable
+      SERVER_GRPC_INSECURE: "true"
+      SERVER_GRPC_BIND_ADDRESS: 0.0.0.0
+      SERVER_GRPC_BROADCAST_ADDRESS: hatchet-engine:7070
+    depends_on:
+      hatchet-setup:
+        condition: service_completed_successfully
+      hatchet-config:
+        condition: service_completed_successfully
+    networks:
+      - echothink-internal
+    volumes:
+      - hatchet-certs:/hatchet/certs
+      - hatchet-config:/hatchet/config
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8733/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  hatchet-api:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-api:v0.79.32
+    command: /hatchet/hatchet-api --config /hatchet/config
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${HATCHET_DB_USER:-hatchet_user}:${HATCHET_DB_PASSWORD}@postgres:5432/hatchet?sslmode=disable
+    depends_on:
+      hatchet-setup:
+        condition: service_completed_successfully
+      hatchet-config:
+        condition: service_completed_successfully
+      hatchet-engine:
+        condition: service_healthy
+    networks:
+      - echothink-internal
+      - echothink-public
+    volumes:
+      - hatchet-certs:/hatchet/certs
+      - hatchet-config:/hatchet/config
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/api/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  hatchet-keygen:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-admin:v0.79.32
+    restart: "no"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        echo "=== Hatchet Key Generation ==="
+        echo "Run the following to generate required encryption keys:"
+        echo ""
+        echo "  Cookie secrets (base64-encoded random):"
+        echo "    openssl rand -base64 32"
+        echo ""
+        echo "  Master keyset, JWT private keyset, JWT public keyset:"
+        echo "    docker run --rm ghcr.io/hatchet-dev/hatchet/hatchet-admin:v0.79.32 /hatchet/hatchet-admin keyset create-local-keys"
+        echo ""
+        echo "Set the output values as:"
+        echo "  HATCHET_AUTH_COOKIE_SECRETS"
+        echo "  HATCHET_ENCRYPTION_MASTER_KEYSET"
+        echo "  HATCHET_ENCRYPTION_JWT_PRIVATE_KEYSET"
+        echo "  HATCHET_ENCRYPTION_JWT_PUBLIC_KEYSET"
+        echo "=== End ==="
+    profiles:
+      - keygen
+    networks:
+      - echothink-internal
+
+volumes:
+  hatchet-certs:
+    driver: local
+  hatchet-config:
+    driver: local

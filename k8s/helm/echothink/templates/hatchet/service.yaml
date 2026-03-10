@@ -1,0 +1,40 @@
+{{- $fullname := include "echothink.fullname" . -}}
+{{- $namespace := include "echothink.namespace" . -}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-hatchet-engine
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "hatchet-engine") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 7070
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "hatchet-engine") | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-hatchet-api
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "hatchet-api") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "hatchet-api") | nindent 4 }}

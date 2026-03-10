@@ -1,0 +1,101 @@
+{{- $fullname := include "echothink.fullname" . -}}
+{{- $namespace := include "echothink.namespace" . -}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-supabase-kong
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "supabase-kong") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: proxy
+      name: proxy
+    - port: 8443
+      targetPort: proxy-ssl
+      name: proxy-ssl
+  selector:
+    {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "supabase-kong") | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-supabase-gotrue
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "supabase-gotrue") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9999
+      targetPort: http
+      name: http
+  selector:
+    {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "supabase-gotrue") | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-supabase-postgrest
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "supabase-postgrest") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: http
+      name: http
+  selector:
+    {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "supabase-postgrest") | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-supabase-realtime
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "supabase-realtime") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 4000
+      targetPort: http
+      name: http
+  selector:
+    {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "supabase-realtime") | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-supabase-storage
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "supabase-storage") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5000
+      targetPort: http
+      name: http
+  selector:
+    {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "supabase-storage") | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-supabase-studio
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "supabase-studio") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: http
+      name: http
+  selector:
+    {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "supabase-studio") | nindent 4 }}

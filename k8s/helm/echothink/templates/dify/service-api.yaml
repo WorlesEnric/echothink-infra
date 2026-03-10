@@ -1,0 +1,36 @@
+{{- $fullname := include "echothink.fullname" . -}}
+{{- $namespace := include "echothink.namespace" . -}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-dify-api
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "dify-api") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5001
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "dify-api") | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-dify-web
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "dify-web") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "dify-web") | nindent 4 }}

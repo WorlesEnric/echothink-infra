@@ -1,0 +1,33 @@
+services:
+  litellm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: echothink-litellm
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    command: --config /app/config.yaml --port 4000
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      LITELLM_DATABASE_URL: postgresql://litellm_user:${LITELLM_DB_PASSWORD}@postgres:5432/litellm
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - echothink-internal
+      - echothink-public
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1', 4000), 5); s.close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s

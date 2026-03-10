@@ -1,0 +1,87 @@
+{{- $fullname := include "echothink.fullname" . -}}
+{{- $namespace := include "echothink.namespace" . -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}-gitlab
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "gitlab") | nindent 4 }}
+spec:
+  serviceName: {{ $fullname }}-gitlab
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "gitlab") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "echothink.componentLabels" (dict "ctx" . "component" "gitlab") | nindent 8 }}
+    spec:
+      containers:
+        - name: gitlab
+          {{- include "echothink.image" (dict "image" .Values.gitlab.image "policy" .Values.global.imagePullPolicy) | nindent 10 }}
+          ports:
+            - containerPort: 80
+              name: http
+              protocol: TCP
+            - containerPort: 443
+              name: https
+              protocol: TCP
+            - containerPort: 22
+              name: ssh
+              protocol: TCP
+          env:
+            - name: GITLAB_OMNIBUS_CONFIG
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $fullname }}-gitlab
+                  key: omnibus-config
+          volumeMounts:
+            - name: data
+              mountPath: /var/opt/gitlab
+            - name: config
+              mountPath: /etc/gitlab
+            - name: logs
+              mountPath: /var/log/gitlab
+          resources:
+            {{- toYaml .Values.gitlab.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /-/liveness
+              port: http
+            initialDelaySeconds: 300
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /-/readiness
+              port: http
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            timeoutSeconds: 5
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- include "echothink.storageClass" . | nindent 8 }}
+        resources:
+          requests:
+            storage: {{ .Values.gitlab.storage.size }}
+    - metadata:
+        name: config
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- include "echothink.storageClass" . | nindent 8 }}
+        resources:
+          requests:
+            storage: 1Gi
+    - metadata:
+        name: logs
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- include "echothink.storageClass" . | nindent 8 }}
+        resources:
+          requests:
+            storage: 5Gi

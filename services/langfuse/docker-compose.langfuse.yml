@@ -1,0 +1,101 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.3
+    container_name: langfuse-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: langfuse
+      CLICKHOUSE_USER: ${LANGFUSE_CLICKHOUSE_USER:-langfuse}
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-langfuse}
+    volumes:
+      - langfuse-clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse/config.xml:/etc/clickhouse-server/config.d/keeper.xml:ro
+    networks:
+      - echothink-internal
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      interval: 30s
+      timeout: 15s
+      retries: 10
+      start_period: 90s
+
+  langfuse:
+    image: langfuse/langfuse:3
+    container_name: langfuse
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3100:3000"
+    environment:
+      # PostgreSQL connection
+      DATABASE_URL: postgresql://langfuse_user:${LANGFUSE_DB_PASSWORD}@postgres:5432/langfuse
+
+      # ClickHouse connection
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: langfuse
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000/langfuse
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+
+      # Redis connection (required for v3)
+      REDIS_CONNECTION_STRING: redis://redis:6379
+
+      # Encryption key (required for v3, 64 hex characters = 256 bits)
+      ENCRYPTION_KEY: ${LANGFUSE_SECRET_KEY}
+
+      # NextAuth configuration
+      NEXTAUTH_URL: https://langfuse.${DOMAIN}
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXT_AUTH_SECRET}
+
+      # Encryption salt for API keys
+      SALT: ${LANGFUSE_SALT}
+
+      # Blob/event storage via S3 (MinIO)
+      LANGFUSE_S3_EVENT_UPLOAD_ENABLED: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse-events
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_ENABLED: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse-media
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+
+      # Authentik OIDC integration
+      AUTH_CUSTOM_CLIENT_ID: ${LANGFUSE_OAUTH_CLIENT_ID}
+      AUTH_CUSTOM_CLIENT_SECRET: ${LANGFUSE_OAUTH_CLIENT_SECRET}
+      AUTH_CUSTOM_ISSUER: https://auth.${DOMAIN}/application/o/langfuse/
+      AUTH_CUSTOM_NAME: Authentik
+      AUTH_CUSTOM_SCOPE: openid profile email
+      AUTH_CUSTOM_CLIENT_AUTH_METHOD: client_secret_post
+      AUTH_CUSTOM_ALLOW_ACCOUNT_LINKING: "true"
+      AUTH_DISABLE_USERNAME_PASSWORD: "false"
+
+      # Telemetry
+      TELEMETRY_ENABLED: "false"
+
+      # Hostname binding
+      HOSTNAME: "0.0.0.0"
+      PORT: "3000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - echothink-internal
+      - echothink-public
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/public/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+volumes:
+  langfuse-clickhouse-data:
+    driver: local

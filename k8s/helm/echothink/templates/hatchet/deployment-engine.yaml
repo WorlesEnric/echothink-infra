@@ -1,0 +1,55 @@
+{{- $fullname := include "echothink.fullname" . -}}
+{{- $namespace := include "echothink.namespace" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-hatchet-engine
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "hatchet-engine") | nindent 4 }}
+spec:
+  replicas: {{ .Values.hatchet.engine.replicas }}
+  selector:
+    matchLabels:
+      {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "hatchet-engine") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "echothink.componentLabels" (dict "ctx" . "component" "hatchet-engine") | nindent 8 }}
+    spec:
+      containers:
+        - name: hatchet-engine
+          {{- include "echothink.image" (dict "image" .Values.hatchet.engine.image "policy" .Values.global.imagePullPolicy) | nindent 10 }}
+          ports:
+            - containerPort: 7070
+              name: grpc
+              protocol: TCP
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          env:
+            - name: DATABASE_URL
+              value: "postgres://{{ .Values.postgres.credentials.username }}:$(POSTGRES_PASSWORD)@{{ $fullname }}-postgres:5432/hatchet"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.credentials.existingSecret | default (printf "%s-postgres" $fullname) }}
+                  key: {{ .Values.postgres.credentials.secretKey }}
+            - name: SERVER_AUTH_COOKIE_SECRETS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.hatchet.existingSecret | default (printf "%s-hatchet" $fullname) }}
+                  key: cookie-secret
+            - name: SERVER_ENCRYPTION_MASTER_KEYSET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.hatchet.existingSecret | default (printf "%s-hatchet" $fullname) }}
+                  key: encryption-keyset
+          resources:
+            {{- toYaml .Values.hatchet.engine.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /api/ready
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10

@@ -1,0 +1,37 @@
+{{- $fullname := include "echothink.fullname" . -}}
+{{- $namespace := include "echothink.namespace" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-graphiti
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "graphiti") | nindent 4 }}
+spec:
+  replicas: {{ .Values.graphiti.server.replicas }}
+  selector:
+    matchLabels:
+      {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "graphiti") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "echothink.componentLabels" (dict "ctx" . "component" "graphiti") | nindent 8 }}
+    spec:
+      containers:
+        - name: graphiti
+          {{- include "echothink.image" (dict "image" .Values.graphiti.server.image "policy" .Values.global.imagePullPolicy) | nindent 10 }}
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          env:
+            - name: NEO4J_URI
+              value: "bolt://{{ $fullname }}-falkordb:6379"
+          resources:
+            {{- toYaml .Values.graphiti.server.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10

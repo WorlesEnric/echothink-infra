@@ -1,0 +1,23 @@
+{{- if .Values.dify.hpa.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "echothink.fullname" . }}-dify-worker
+  namespace: {{ include "echothink.namespace" . }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "dify-worker") | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "echothink.fullname" . }}-dify-worker
+  minReplicas: {{ .Values.dify.hpa.minReplicas }}
+  maxReplicas: {{ .Values.dify.hpa.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.dify.hpa.targetCPU }}
+{{- end }}

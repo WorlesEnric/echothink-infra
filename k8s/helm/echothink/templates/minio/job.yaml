@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "echothink.fullname" . }}-minio-init
+  namespace: {{ include "echothink.namespace" . }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "minio") | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: minio/mc:latest
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.minio.credentials.existingSecret | default (printf "%s-minio" (include "echothink.fullname" .)) }}
+                  key: root-user
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.minio.credentials.existingSecret | default (printf "%s-minio" (include "echothink.fullname" .)) }}
+                  key: root-password
+          command:
+            - /bin/sh
+            - -c
+            - |
+              mc alias set echothink http://{{ include "echothink.fullname" . }}-minio:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD
+              {{- range .Values.minio.buckets }}
+              mc mb --ignore-existing echothink/{{ .name }}
+              {{- end }}

@@ -1,0 +1,110 @@
+model_list:
+  # High-quality model group - best reasoning and generation
+  - model_name: high-quality
+    litellm_params:
+      model: anthropic/claude-opus-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      description: "Claude Opus 4.6 - highest quality reasoning"
+
+  - model_name: high-quality
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      description: "GPT-4o - high quality multimodal"
+
+  # Cost-effective model group - good quality at lower cost
+  - model_name: cost-effective
+    litellm_params:
+      model: anthropic/claude-haiku-4-5-20251001
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      description: "Claude Haiku 4.5 - fast and cost-effective"
+
+  - model_name: cost-effective
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      description: "GPT-4o-mini - cost-effective alternative"
+
+  # Fast model group - latency-optimized routing
+  - model_name: fast
+    litellm_params:
+      model: anthropic/claude-haiku-4-5-20251001
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      description: "Claude Haiku 4.5 - low latency"
+
+  - model_name: fast
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      description: "GPT-4o-mini - low latency"
+
+  # Code model group - optimized for code generation and analysis
+  - model_name: code
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      description: "Claude Sonnet 4.6 - excellent for code"
+
+  - model_name: code
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      description: "GPT-4o - strong code capabilities"
+
+  # Embedding model group
+  - model_name: embedding
+    litellm_params:
+      model: openai/text-embedding-3-small
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      description: "text-embedding-3-small - cost-effective embeddings"
+
+  - model_name: embedding
+    litellm_params:
+      model: openai/text-embedding-3-large
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      description: "text-embedding-3-large - high-dimensional embeddings"
+
+router_settings:
+  routing_strategy: latency-based-routing
+  num_retries: 3
+  retry_after: 5
+  timeout: 120
+  allowed_fails: 3
+  cooldown_time: 60
+  fallbacks:
+    - high-quality:
+        - code
+        - cost-effective
+    - code:
+        - high-quality
+        - cost-effective
+    - cost-effective:
+        - fast
+    - fast:
+        - cost-effective
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/LITELLM_DATABASE_URL
+  allow_user_auth: true
+  store_model_in_db: true
+
+litellm_settings:
+  drop_params: true
+  set_verbose: false
+  cache: true
+  cache_params:
+    type: redis
+    host: os.environ/REDIS_HOST
+    port: os.environ/REDIS_PORT
+    namespace: "litellm_cache"

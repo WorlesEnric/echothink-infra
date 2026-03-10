@@ -1,0 +1,134 @@
+services:
+  dify-api:
+    image: langgenius/dify-api:1.13.0
+    restart: unless-stopped
+    env_file:
+      - ./config/.env
+    environment:
+      MODE: api
+      DB_USERNAME: ${DIFY_DB_USER:-dify_user}
+      DB_PASSWORD: ${DIFY_DB_PASSWORD}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_DATABASE: dify
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: "2"
+      STORAGE_TYPE: s3
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET_NAME: dify-storage
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      S3_REGION: us-east-1
+      S3_USE_PATH_STYLE: "true"
+      CELERY_BROKER_URL: redis://redis:6379/1
+      OPENAI_API_BASE: http://litellm:4000/v1
+      OPENAI_API_KEY: ${LITELLM_MASTER_KEY}
+      SECRET_KEY: ${DIFY_SECRET_KEY}
+      CONSOLE_WEB_URL: https://dify.${DOMAIN}
+      CONSOLE_API_URL: https://dify.${DOMAIN}
+      SERVICE_API_URL: https://dify-api.${DOMAIN}
+      APP_WEB_URL: https://dify.${DOMAIN}
+      CODE_EXECUTION_ENDPOINT: http://dify-sandbox:8194
+      CODE_MAX_NUMBER: "9999999999999"
+      CODE_MIN_NUMBER: "-9999999999999"
+      CODE_MAX_STRING_LENGTH: "80000"
+      SENTRY_DSN: ""
+      LOG_LEVEL: INFO
+    volumes:
+      - dify-api-storage:/app/api/storage
+    depends_on:
+      - dify-sandbox
+    networks:
+      - echothink-internal
+      - echothink-public
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  dify-web:
+    image: langgenius/dify-web:1.13.0
+    container_name: echothink-dify-web
+    restart: unless-stopped
+    environment:
+      CONSOLE_API_URL: https://dify.${DOMAIN}
+      APP_API_URL: https://dify.${DOMAIN}
+      SENTRY_DSN: ""
+    depends_on:
+      - dify-api
+    networks:
+      - echothink-internal
+      - echothink-public
+    healthcheck:
+      test: ["CMD", "node", "-e", "const net=require('net'); const host=process.env.HOSTNAME || '127.0.0.1'; const socket=net.createConnection({host, port:3000}, ()=>{socket.end(); process.exit(0);}); socket.on('error', ()=>process.exit(1));"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  dify-worker:
+    image: langgenius/dify-api:1.13.0
+    restart: unless-stopped
+    command: celery -A app.celery worker -P gevent -c 4 --loglevel INFO -Q dataset,generation,mail,ops_trace
+    env_file:
+      - ./config/.env
+    environment:
+      MODE: worker
+      DB_USERNAME: ${DIFY_DB_USER:-dify_user}
+      DB_PASSWORD: ${DIFY_DB_PASSWORD}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_DATABASE: dify
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: "2"
+      STORAGE_TYPE: s3
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET_NAME: dify-storage
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      S3_REGION: us-east-1
+      S3_USE_PATH_STYLE: "true"
+      CELERY_BROKER_URL: redis://redis:6379/1
+      OPENAI_API_BASE: http://litellm:4000/v1
+      OPENAI_API_KEY: ${LITELLM_MASTER_KEY}
+      SECRET_KEY: ${DIFY_SECRET_KEY}
+      CODE_EXECUTION_ENDPOINT: http://dify-sandbox:8194
+      SENTRY_DSN: ""
+      LOG_LEVEL: INFO
+    volumes:
+      - dify-api-storage:/app/api/storage
+    depends_on:
+      - dify-api
+      - dify-sandbox
+    networks:
+      - echothink-internal
+
+  dify-sandbox:
+    image: langgenius/dify-sandbox:0.2.12
+    restart: unless-stopped
+    environment:
+      API_KEY: ${DIFY_SANDBOX_API_KEY:-dify-sandbox-key}
+      GIN_MODE: release
+      WORKER_TIMEOUT: "15"
+      ENABLE_NETWORK: "true"
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      SANDBOX_PORT: "8194"
+    networks:
+      - echothink-internal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8194/health"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  dify-api-storage:
+    driver: local

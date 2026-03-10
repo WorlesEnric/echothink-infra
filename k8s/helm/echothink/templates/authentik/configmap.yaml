@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "echothink.fullname" . }}-authentik
+  namespace: {{ include "echothink.namespace" . }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "authentik") | nindent 4 }}
+data:
+  AUTHENTIK_LOG_LEVEL: info
+  AUTHENTIK_COOKIE_DOMAIN: {{ .Values.global.domain }}
+  AUTHENTIK_DISABLE_UPDATE_CHECK: "false"
+  AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+  AUTHENTIK_AVATARS: gravatar

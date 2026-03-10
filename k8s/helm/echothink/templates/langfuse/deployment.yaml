@@ -1,0 +1,60 @@
+{{- $fullname := include "echothink.fullname" . -}}
+{{- $namespace := include "echothink.namespace" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-langfuse
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "echothink.componentLabels" (dict "ctx" . "component" "langfuse") | nindent 4 }}
+spec:
+  replicas: {{ .Values.langfuse.replicas }}
+  selector:
+    matchLabels:
+      {{- include "echothink.componentSelectorLabels" (dict "ctx" . "component" "langfuse") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "echothink.componentLabels" (dict "ctx" . "component" "langfuse") | nindent 8 }}
+    spec:
+      containers:
+        - name: langfuse
+          {{- include "echothink.image" (dict "image" .Values.langfuse.image "policy" .Values.global.imagePullPolicy) | nindent 10 }}
+          ports:
+            - containerPort: 3000
+              name: http
+              protocol: TCP
+          env:
+            - name: DATABASE_URL
+              value: "postgres://{{ .Values.postgres.credentials.username }}:$(POSTGRES_PASSWORD)@{{ $fullname }}-postgres:5432/langfuse"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.credentials.existingSecret | default (printf "%s-postgres" $fullname) }}
+                  key: {{ .Values.postgres.credentials.secretKey }}
+            - name: NEXTAUTH_URL
+              value: "https://langfuse.{{ .Values.global.domain }}"
+            - name: NEXTAUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.langfuse.existingSecret | default (printf "%s-langfuse" $fullname) }}
+                  key: nextauth-secret
+            - name: SALT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.langfuse.existingSecret | default (printf "%s-langfuse" $fullname) }}
+                  key: salt
+          resources:
+            {{- toYaml .Values.langfuse.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /api/public/health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/public/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
