@@ -15,7 +15,8 @@ services:
       REDIS_URL: redis://redis:6379
 
       # Application URL
-      URL: https://outline.${DOMAIN}
+      URL: http://outline.${DOMAIN}
+      FORCE_HTTPS: "false"
 
       # Security keys
       SECRET_KEY: ${OUTLINE_SECRET_KEY}

@@ -27,7 +27,7 @@ services:
     shm_size: 256m
 
   redis:
-    image: redis:8.6.1-alpine
+    image: redis:7.2-alpine
     container_name: echothink-redis
     restart: unless-stopped
     command: redis-server /usr/local/etc/redis/redis.conf

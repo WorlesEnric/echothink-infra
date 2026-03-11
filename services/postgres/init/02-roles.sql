@@ -1,7 +1,7 @@
 -- Create service-specific roles with placeholder passwords
 -- These placeholders are replaced by the init.sh script before first run
 
--- supabase_admin
+-- supabase_admin (owns supabase + _supabase databases, used by realtime, meta, analytics)
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'supabase_admin') THEN
@@ -10,10 +10,57 @@ BEGIN
 END $$;
 GRANT ALL PRIVILEGES ON DATABASE supabase TO supabase_admin;
 ALTER DATABASE supabase OWNER TO supabase_admin;
+GRANT ALL PRIVILEGES ON DATABASE _supabase TO supabase_admin;
+ALTER DATABASE _supabase OWNER TO supabase_admin;
 
 \c supabase
 ALTER SCHEMA public OWNER TO supabase_admin;
 GRANT ALL ON SCHEMA public TO supabase_admin;
+
+\c _supabase
+ALTER SCHEMA _analytics OWNER TO supabase_admin;
+GRANT ALL ON SCHEMA _analytics TO supabase_admin;
+
+\c postgres
+
+-- supabase_auth_admin (used by GoTrue/Auth service)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'supabase_auth_admin') THEN
+    CREATE ROLE supabase_auth_admin WITH LOGIN NOINHERIT PASSWORD 'Ua2o3hFDi9gS7ih8Nzkaicdt';
+  END IF;
+END $$;
+GRANT ALL PRIVILEGES ON DATABASE supabase TO supabase_auth_admin;
+
+\c supabase
+CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION supabase_auth_admin;
+GRANT ALL ON SCHEMA auth TO supabase_auth_admin;
+
+\c postgres
+
+-- supabase_storage_admin (used by Storage API service)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'supabase_storage_admin') THEN
+    CREATE ROLE supabase_storage_admin WITH LOGIN NOINHERIT PASSWORD 'Ua2o3hFDi9gS7ih8Nzkaicdt';
+  END IF;
+END $$;
+GRANT ALL PRIVILEGES ON DATABASE supabase TO supabase_storage_admin;
+
+\c supabase
+CREATE SCHEMA IF NOT EXISTS storage AUTHORIZATION supabase_storage_admin;
+GRANT ALL ON SCHEMA storage TO supabase_storage_admin;
+
+\c postgres
+
+-- authenticator (used by PostgREST; impersonates anon/authenticated roles)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'authenticator') THEN
+    CREATE ROLE authenticator WITH LOGIN NOINHERIT PASSWORD 'Ua2o3hFDi9gS7ih8Nzkaicdt';
+  END IF;
+END $$;
+GRANT ALL PRIVILEGES ON DATABASE supabase TO authenticator;
 
 \c postgres
 

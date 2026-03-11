@@ -4,6 +4,7 @@ services:
     container_name: authentik-server
     command: server
     restart: unless-stopped
+    shm_size: "512mb"
     ports:
       - "9000:9000"
       - "9443:9443"
@@ -41,6 +42,8 @@ services:
     container_name: authentik-worker
     command: worker
     restart: unless-stopped
+    user: root
+    shm_size: "512mb"
     environment:
       AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
       AUTHENTIK_POSTGRESQL__HOST: ${AUTHENTIK_POSTGRESQL__HOST:-postgres}
@@ -55,7 +58,8 @@ services:
       - ./blueprints:/blueprints/custom:ro
       - authentik-media:/media
       - authentik-templates:/templates
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - authentik-certs:/certs
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
         condition: service_healthy
@@ -68,4 +72,6 @@ volumes:
   authentik-media:
     driver: local
   authentik-templates:
+    driver: local
+  authentik-certs:
     driver: local

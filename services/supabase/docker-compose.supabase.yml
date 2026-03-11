@@ -1,4 +1,35 @@
 services:
+  supabase-analytics:
+    image: supabase/logflare:1.31.2
+    container_name: supabase-analytics
+    restart: unless-stopped
+    environment:
+      LOGFLARE_NODE_HOST: 127.0.0.1
+      DB_USERNAME: supabase_admin
+      DB_DATABASE: _supabase
+      DB_HOSTNAME: ${SUPABASE_DB_HOST:-postgres}
+      DB_PORT: ${SUPABASE_DB_PORT:-5432}
+      DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
+      DB_SCHEMA: _analytics
+      LOGFLARE_PUBLIC_ACCESS_TOKEN: ${SUPABASE_LOGFLARE_PUBLIC_ACCESS_TOKEN}
+      LOGFLARE_PRIVATE_ACCESS_TOKEN: ${SUPABASE_LOGFLARE_PRIVATE_ACCESS_TOKEN}
+      LOGFLARE_SINGLE_TENANT: "true"
+      LOGFLARE_SUPABASE_MODE: "true"
+      POSTGRES_BACKEND_URL: postgresql://supabase_admin:${SUPABASE_DB_PASSWORD}@${SUPABASE_DB_HOST:-postgres}:${SUPABASE_DB_PORT:-5432}/_supabase
+      POSTGRES_BACKEND_SCHEMA: _analytics
+      LOGFLARE_FEATURE_FLAG_OVERRIDE: multibackend=true
+    healthcheck:
+      test: ["CMD", "curl", "http://localhost:4000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - echothink-internal
+
   supabase-kong:
     image: kong:2.8.1
     container_name: supabase-kong
@@ -8,20 +39,19 @@ services:
       - "8443:8443"
     environment:
       KONG_DATABASE: "off"
-      KONG_DECLARATIVE_CONFIG: /tmp/kong.yml
+      KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
       KONG_DNS_ORDER: LAST,A,CNAME
-      KONG_PLUGINS: request-transformer,cors,key-auth,acl,jwt
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth,request-termination,ip-restriction,jwt
       KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
       KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
-      KONG_STATUS_LISTEN: "0.0.0.0:8100"
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      DASHBOARD_USERNAME: ${SUPABASE_DASHBOARD_USERNAME:-supabase}
+      DASHBOARD_PASSWORD: ${SUPABASE_DASHBOARD_PASSWORD}
     volumes:
-      - ./volumes/kong.yml:/var/lib/kong/kong.yml:ro
-    command: >
-      /bin/sh -ec 'sed
-      -e "s|SUPABASE_ANON_KEY_PLACEHOLDER|$${SUPABASE_ANON_KEY}|g"
-      -e "s|SUPABASE_SERVICE_ROLE_KEY_PLACEHOLDER|$${SUPABASE_SERVICE_ROLE_KEY}|g"
-      /var/lib/kong/kong.yml > /tmp/kong.yml;
-      exec /docker-entrypoint.sh kong docker-start'
+      - ./volumes/kong.yml:/home/kong/temp.yml:ro
+    entrypoint: >
+      bash -c 'eval "echo \"$$(cat ~/temp.yml)\"" > ~/kong.yml && /docker-entrypoint.sh kong docker-start'
     healthcheck:
       test: ["CMD", "kong", "health"]
       interval: 30s
@@ -29,6 +59,8 @@ services:
       retries: 5
       start_period: 30s
     depends_on:
+      supabase-analytics:
+        condition: service_healthy
       supabase-auth:
         condition: service_healthy
       supabase-rest:
@@ -51,7 +83,7 @@ services:
       API_EXTERNAL_URL: ${SUPABASE_PUBLIC_URL:-http://localhost:8000}
 
       GOTRUE_DB_DRIVER: postgres
-      GOTRUE_DB_DATABASE_URL: postgres://${SUPABASE_DB_USER:-supabase_admin}:${SUPABASE_DB_PASSWORD}@${SUPABASE_DB_HOST:-postgres}:${SUPABASE_DB_PORT:-5432}/${SUPABASE_DB_NAME:-supabase}?sslmode=disable&search_path=auth
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${SUPABASE_DB_PASSWORD}@${SUPABASE_DB_HOST:-postgres}:${SUPABASE_DB_PORT:-5432}/${SUPABASE_DB_NAME:-supabase}?sslmode=disable&search_path=auth
 
       GOTRUE_SITE_URL: ${SUPABASE_SITE_URL:-http://localhost:3000}
       GOTRUE_URI_ALLOW_LIST: ${SUPABASE_ADDITIONAL_REDIRECT_URLS:-}
@@ -84,6 +116,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      supabase-analytics:
+        condition: service_healthy
     networks:
       - echothink-internal
 
@@ -92,7 +126,7 @@ services:
     container_name: supabase-rest
     restart: unless-stopped
     environment:
-      PGRST_DB_URI: postgres://${SUPABASE_DB_USER:-supabase_admin}:${SUPABASE_DB_PASSWORD}@${SUPABASE_DB_HOST:-postgres}:${SUPABASE_DB_PORT:-5432}/${SUPABASE_DB_NAME:-supabase}
+      PGRST_DB_URI: postgres://authenticator:${SUPABASE_DB_PASSWORD}@${SUPABASE_DB_HOST:-postgres}:${SUPABASE_DB_PORT:-5432}/${SUPABASE_DB_NAME:-supabase}
       PGRST_DB_SCHEMAS: ${PGRST_DB_SCHEMAS:-public,graphql}
       PGRST_DB_ANON_ROLE: anon
       PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET}
@@ -103,6 +137,8 @@ services:
       PGRST_SERVER_PORT: 3000
     depends_on:
       postgres:
+        condition: service_healthy
+      supabase-analytics:
         condition: service_healthy
     networks:
       - echothink-internal
@@ -115,7 +151,7 @@ services:
       PORT: 4000
       DB_HOST: ${SUPABASE_DB_HOST:-postgres}
       DB_PORT: ${SUPABASE_DB_PORT:-5432}
-      DB_USER: ${SUPABASE_DB_USER:-supabase_admin}
+      DB_USER: supabase_admin
       DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
       DB_NAME: ${SUPABASE_DB_NAME:-supabase}
       DB_AFTER_CONNECT_QUERY: "SET search_path TO _realtime"
@@ -132,6 +168,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      supabase-analytics:
+        condition: service_healthy
     networks:
       - echothink-internal
 
@@ -144,7 +182,7 @@ services:
       SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       POSTGREST_URL: http://supabase-rest:3000
       PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET}
-      DATABASE_URL: postgres://${SUPABASE_DB_USER:-supabase_admin}:${SUPABASE_DB_PASSWORD}@${SUPABASE_DB_HOST:-postgres}:${SUPABASE_DB_PORT:-5432}/${SUPABASE_DB_NAME:-supabase}
+      DATABASE_URL: postgres://supabase_storage_admin:${SUPABASE_DB_PASSWORD}@${SUPABASE_DB_HOST:-postgres}:${SUPABASE_DB_PORT:-5432}/${SUPABASE_DB_NAME:-supabase}
       FILE_SIZE_LIMIT: 52428800
       STORAGE_BACKEND: s3
       GLOBAL_S3_BUCKET: ${SUPABASE_STORAGE_S3_BUCKET:-supabase-storage}
@@ -191,12 +229,16 @@ services:
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       AUTH_JWT_SECRET: ${SUPABASE_JWT_SECRET}
-      LOGFLARE_API_KEY: ${SUPABASE_LOGFLARE_API_KEY:-placeholder}
-      LOGFLARE_URL: http://localhost:4000
+      LOGFLARE_API_KEY: ${SUPABASE_LOGFLARE_PUBLIC_ACCESS_TOKEN}
+      LOGFLARE_PUBLIC_ACCESS_TOKEN: ${SUPABASE_LOGFLARE_PUBLIC_ACCESS_TOKEN}
+      LOGFLARE_PRIVATE_ACCESS_TOKEN: ${SUPABASE_LOGFLARE_PRIVATE_ACCESS_TOKEN}
+      LOGFLARE_URL: http://supabase-analytics:4000
       NEXT_PUBLIC_ENABLE_LOGS: "true"
       NEXT_ANALYTICS_BACKEND_PROVIDER: postgres
     depends_on:
       supabase-kong:
+        condition: service_healthy
+      supabase-analytics:
         condition: service_healthy
     networks:
       - echothink-internal
@@ -234,7 +276,7 @@ services:
       PG_META_DB_HOST: ${SUPABASE_DB_HOST:-postgres}
       PG_META_DB_PORT: ${SUPABASE_DB_PORT:-5432}
       PG_META_DB_NAME: ${SUPABASE_DB_NAME:-supabase}
-      PG_META_DB_USER: ${SUPABASE_DB_USER:-supabase_admin}
+      PG_META_DB_USER: supabase_admin
       PG_META_DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
     depends_on:
       postgres:

@@ -93,6 +93,10 @@ GENERATED=0
 # PostgreSQL passwords
 if set_env "POSTGRES_PASSWORD" "$(gen_password 32)"; then ((GENERATED++)); fi
 if set_env "SUPABASE_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)); fi
+if set_env "SUPABASE_DASHBOARD_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)); fi
+if set_env "REDIS_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)); fi
+if set_env "SUPABASE_LOGFLARE_PUBLIC_ACCESS_TOKEN" "$(gen_password 32)"; then ((GENERATED++)); fi
+if set_env "SUPABASE_LOGFLARE_PRIVATE_ACCESS_TOKEN" "$(gen_password 32)"; then ((GENERATED++)); fi
 if set_env "HATCHET_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)); fi
 if set_env "LANGFUSE_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)); fi
 if set_env "N8N_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)); fi

@@ -11,6 +11,7 @@ services:
     environment:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       LITELLM_DATABASE_URL: postgresql://litellm_user:${LITELLM_DB_PASSWORD}@postgres:5432/litellm
+      STORE_MODEL_IN_DB: "True"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       OPENAI_API_KEY: ${OPENAI_API_KEY}
@@ -26,7 +27,7 @@ services:
       - echothink-internal
       - echothink-public
     healthcheck:
-      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1', 4000), 5); s.close()"]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\""]
       interval: 30s
       timeout: 10s
       retries: 5

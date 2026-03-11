@@ -4,6 +4,7 @@
 
 -- Create databases
 CREATE DATABASE supabase;
+CREATE DATABASE _supabase;
 CREATE DATABASE hatchet;
 CREATE DATABASE langfuse;
 CREATE DATABASE n8n;
@@ -76,6 +77,10 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- _supabase: analytics schema used by Logflare
+\c _supabase
+CREATE SCHEMA IF NOT EXISTS _analytics;
 
 -- Switch back to default database
 \c postgres

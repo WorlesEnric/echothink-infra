@@ -1,6 +1,6 @@
 services:
   neo4j:
-    image: neo4j:5-community
+    image: neo4j:5.26.2-community
     container_name: echothink-neo4j
     restart: unless-stopped
     environment:
@@ -36,6 +36,8 @@ services:
       MODEL_NAME: cost-effective
       EMBEDDING_MODEL_NAME: embedding
       LOG_LEVEL: INFO
+      db_backend: neo4j
+      PORT: "8000"
     ports:
       - "8000"
     depends_on:

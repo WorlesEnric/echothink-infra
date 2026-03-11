@@ -4,9 +4,9 @@ services:
     container_name: langfuse-clickhouse
     restart: unless-stopped
     environment:
-      CLICKHOUSE_DB: langfuse
-      CLICKHOUSE_USER: ${LANGFUSE_CLICKHOUSE_USER:-langfuse}
-      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-langfuse}
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: ${LANGFUSE_CLICKHOUSE_USER:-clickhouse}
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-clickhouse}
     volumes:
       - langfuse-clickhouse-data:/var/lib/clickhouse
       - ./clickhouse/config.xml:/etc/clickhouse-server/config.d/keeper.xml:ro
@@ -19,9 +19,9 @@ services:
       retries: 10
       start_period: 90s
 
-  langfuse:
+  langfuse-web:
     image: langfuse/langfuse:3
-    container_name: langfuse
+    container_name: langfuse-web
     restart: unless-stopped
     ports:
       - "127.0.0.1:3100:3000"
@@ -31,13 +31,15 @@ services:
 
       # ClickHouse connection
       CLICKHOUSE_URL: http://clickhouse:8123
-      CLICKHOUSE_USER: langfuse
-      CLICKHOUSE_PASSWORD: langfuse
-      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000/langfuse
+      CLICKHOUSE_USER: ${LANGFUSE_CLICKHOUSE_USER:-clickhouse}
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-clickhouse}
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000/default
       CLICKHOUSE_CLUSTER_ENABLED: "false"
 
       # Redis connection (required for v3)
-      REDIS_CONNECTION_STRING: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_AUTH: ${REDIS_PASSWORD:-}
 
       # Encryption key (required for v3, 64 hex characters = 256 bits)
       ENCRYPTION_KEY: ${LANGFUSE_SECRET_KEY}
@@ -78,7 +80,6 @@ services:
       # Telemetry
       TELEMETRY_ENABLED: "false"
 
-      # Hostname binding
       HOSTNAME: "0.0.0.0"
       PORT: "3000"
     depends_on:
@@ -95,6 +96,71 @@ services:
       timeout: 10s
       retries: 10
       start_period: 300s
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    container_name: langfuse-worker
+    restart: unless-stopped
+    environment:
+      # PostgreSQL connection
+      DATABASE_URL: postgresql://langfuse_user:${LANGFUSE_DB_PASSWORD}@postgres:5432/langfuse
+
+      # ClickHouse connection
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: ${LANGFUSE_CLICKHOUSE_USER:-clickhouse}
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-clickhouse}
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000/default
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+
+      # Redis connection
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_AUTH: ${REDIS_PASSWORD:-}
+
+      # Encryption key
+      ENCRYPTION_KEY: ${LANGFUSE_SECRET_KEY}
+
+      # NextAuth configuration (required by worker)
+      NEXTAUTH_URL: https://langfuse.${DOMAIN}
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXT_AUTH_SECRET}
+
+      SALT: ${LANGFUSE_SALT}
+
+      # Blob/event storage via S3 (MinIO)
+      LANGFUSE_S3_EVENT_UPLOAD_ENABLED: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse-events
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_ENABLED: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse-media
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+
+      TELEMETRY_ENABLED: "false"
+
+      HOSTNAME: "0.0.0.0"
+      PORT: "3030"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      langfuse-web:
+        condition: service_healthy
+    networks:
+      - echothink-internal
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3030/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
 
 volumes:
   langfuse-clickhouse-data:

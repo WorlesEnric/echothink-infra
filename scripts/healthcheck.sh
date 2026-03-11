@@ -24,7 +24,8 @@ NEO4J_CONTAINER="${ECHOTHINK_NEO4J_CONTAINER:-echothink-neo4j}"
 MINIO_CONTAINER="${ECHOTHINK_MINIO_CONTAINER:-echothink-minio}"
 AUTHENTIK_CONTAINER="${ECHOTHINK_AUTHENTIK_CONTAINER:-authentik-server}"
 CLICKHOUSE_CONTAINER="${ECHOTHINK_CLICKHOUSE_CONTAINER:-langfuse-clickhouse}"
-LANGFUSE_CONTAINER="${ECHOTHINK_LANGFUSE_CONTAINER:-langfuse}"
+LANGFUSE_CONTAINER="${ECHOTHINK_LANGFUSE_CONTAINER:-langfuse-web}"
+LANGFUSE_WORKER_CONTAINER="${ECHOTHINK_LANGFUSE_WORKER_CONTAINER:-langfuse-worker}"
 LITELLM_CONTAINER="${ECHOTHINK_LITELLM_CONTAINER:-echothink-litellm}"
 N8N_CONTAINER="${ECHOTHINK_N8N_CONTAINER:-n8n}"
 OUTLINE_CONTAINER="${ECHOTHINK_OUTLINE_CONTAINER:-outline}"
@@ -35,7 +36,7 @@ NGINX_CONTAINER="${ECHOTHINK_NGINX_CONTAINER:-echothink-nginx}"
 POSTGRES_USER="${POSTGRES_USER:-postgres}"
 
 # Databases that should exist in PostgreSQL
-DATABASES=(postgres authentik supabase dify hatchet langfuse litellm n8n outline gitlab)
+DATABASES=(postgres authentik supabase _supabase dify hatchet langfuse litellm n8n outline gitlab)
 
 # MinIO buckets created by minio-init (alias: echothink)
 MINIO_BUCKETS=(supabase-storage dify-storage outline-data artifacts backups langfuse-events langfuse-media)
@@ -197,9 +198,9 @@ check_nginx() {
         return
     fi
 
-    # nginx:alpine has no curl/wget -- use nginx -t to validate config,
-    # and verify the master process is running via signal test.
-    if docker exec "$NGINX_CONTAINER" nginx -t > /dev/null 2>&1; then
+    # nginx runs with envsubst-processed config at /tmp/nginx.conf (not the
+    # original template at /etc/nginx/nginx.conf which still has $DOMAIN vars).
+    if docker exec "$NGINX_CONTAINER" nginx -t -c /tmp/nginx.conf > /dev/null 2>&1; then
         print_ok "Nginx configuration is valid"
     else
         print_fail "Nginx configuration test failed"
@@ -295,6 +296,17 @@ check_authentik() {
 check_supabase() {
     print_header "Supabase"
 
+    # Analytics (Logflare)
+    if check_container_running "supabase-analytics"; then
+        if docker exec supabase-analytics curl -sf http://localhost:4000/health > /dev/null 2>&1; then
+            print_ok "Supabase Analytics (Logflare) is healthy"
+        else
+            print_fail "Supabase Analytics is not responding"
+        fi
+    else
+        print_fail "Supabase Analytics container is not running"
+    fi
+
     # Kong API Gateway
     if check_container_running "supabase-kong"; then
         if docker exec supabase-kong kong health > /dev/null 2>&1; then
@@ -366,7 +378,7 @@ check_litellm() {
     # Also try the /health endpoint inside the container
     if docker exec "$LITELLM_CONTAINER" curl -sf http://127.0.0.1:4000/health > /dev/null 2>&1; then
         print_ok "LiteLLM /health endpoint is healthy"
-    elif docker exec "$LITELLM_CONTAINER" wget --spider -q http://127.0.0.1:4000/health 2>/dev/null; then
+    elif docker exec "$LITELLM_CONTAINER" wget --spider -q http://127.0.0.1:4000/health > /dev/null 2>&1; then
         print_ok "LiteLLM /health endpoint is healthy"
     fi
 }
@@ -397,6 +409,34 @@ check_dify() {
         print_ok "Dify Web container is running"
     else
         print_fail "Dify Web container is not running"
+    fi
+
+    # Dify Plugin Daemon
+    local plugin_container
+    plugin_container=$(find_container "dify-plugin-daemon")
+
+    if [[ -n "$plugin_container" ]]; then
+        if docker exec "$plugin_container" curl -s http://localhost:5002/ > /dev/null 2>&1; then
+            print_ok "Dify Plugin Daemon is healthy"
+        else
+            print_fail "Dify Plugin Daemon health check failed"
+        fi
+    else
+        print_fail "Dify Plugin Daemon container is not running"
+    fi
+
+    # Dify Sandbox
+    local sandbox_container
+    sandbox_container=$(find_container "dify-sandbox")
+
+    if [[ -n "$sandbox_container" ]]; then
+        if docker exec "$sandbox_container" curl -sf http://localhost:8194/health > /dev/null 2>&1; then
+            print_ok "Dify Sandbox is healthy"
+        else
+            print_fail "Dify Sandbox health check failed"
+        fi
+    else
+        print_fail "Dify Sandbox container is not running"
     fi
 }
 
@@ -463,16 +503,25 @@ check_langfuse() {
     print_header "Langfuse"
 
     if ! check_container_running "$LANGFUSE_CONTAINER"; then
-        print_fail "Langfuse container is not running ($LANGFUSE_CONTAINER)"
+        print_fail "Langfuse web container is not running ($LANGFUSE_CONTAINER)"
         return
     fi
 
-    # langfuse/langfuse:3 is a Node.js image -- wget may not be installed.
-    # Use node with fetch (available in Node 18+) to check the health endpoint.
+    # langfuse/langfuse:3 is a Node.js image -- use node fetch (Node 18+).
     if docker exec "$LANGFUSE_CONTAINER" node -e "fetch('http://localhost:3000/api/public/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" 2>/dev/null; then
-        print_ok "Langfuse is healthy"
+        print_ok "Langfuse web is healthy"
     else
-        print_fail "Langfuse health endpoint is not responding"
+        print_fail "Langfuse web health endpoint is not responding"
+    fi
+
+    if check_container_running "$LANGFUSE_WORKER_CONTAINER"; then
+        if docker exec "$LANGFUSE_WORKER_CONTAINER" node -e "fetch('http://localhost:3030/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" 2>/dev/null; then
+            print_ok "Langfuse worker is healthy"
+        else
+            print_fail "Langfuse worker health endpoint is not responding"
+        fi
+    else
+        print_fail "Langfuse worker container is not running ($LANGFUSE_WORKER_CONTAINER)"
     fi
 }
 

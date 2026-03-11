@@ -1,13 +1,13 @@
-_format_version: "2.1"
+_format_version: "\"2.1\""
 _transform: true
 
 consumers:
   - username: ANON
     keyauth_credentials:
-      - key: SUPABASE_ANON_KEY_PLACEHOLDER
+      - key: ${SUPABASE_ANON_KEY}
   - username: SERVICE_ROLE
     keyauth_credentials:
-      - key: SUPABASE_SERVICE_ROLE_KEY_PLACEHOLDER
+      - key: ${SUPABASE_SERVICE_KEY}
 
 acls:
   - consumer: ANON
@@ -19,7 +19,7 @@ plugins:
   - name: cors
     config:
       origins:
-        - "*"
+        - "\"*\""
       methods:
         - GET
         - POST
