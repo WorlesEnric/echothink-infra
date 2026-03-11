@@ -1,0 +1,43 @@
+# Vendored upstream source trees
+/3rd_party/
+
+# Local environment and secrets
+/.env
+/.env.*
+!/.env.example
+/.env.bak
+
+# Generated certificates
+/services/nginx/ssl/server.crt
+/services/nginx/ssl/server.key
+
+# Backup output
+/backups/
+
+# Local tool settings
+/.claude/settings.local.json
+
+# Logs and temporary files
+*.log
+*.out
+*.pid
+*.tmp
+*.swp
+*.swo
+*~
+
+# Common dependency and cache directories
+**/node_modules/
+**/.venv/
+**/venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.direnv/
