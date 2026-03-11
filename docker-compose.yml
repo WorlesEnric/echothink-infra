@@ -53,6 +53,7 @@ services:
       - ./services/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./services/nginx/conf.d:/etc/nginx/conf.d:ro
       - ./services/nginx/ssl:/etc/nginx/ssl:ro
+      - ./services/nginx/snippets:/etc/nginx/snippets:ro
     environment:
       DOMAIN: ${DOMAIN:-localhost}
     command: >

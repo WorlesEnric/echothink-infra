@@ -1,0 +1,37 @@
+version: 1
+metadata:
+  name: EchoThink n8n Proxy Provider
+  labels:
+    blueprints.goauthentik.io/description: "Forward auth proxy provider for n8n automation"
+    blueprints.goauthentik.io/instantiate: "true"
+
+entries:
+  # ── Proxy Provider (forward auth) ───────────────────────────────────
+  # n8n does not support OIDC natively; Authentik gates access via
+  # nginx forward auth and the embedded outpost.
+
+  - model: authentik_providers_proxy.proxyprovider
+    id: n8n-provider
+    identifiers:
+      name: n8n Proxy Provider
+    attrs:
+      name: n8n Proxy Provider
+      mode: forward_single
+      external_host: https://n8n.localhost
+      authorization_flow: !Find [authentik_flows.flow, [slug, "default-provider-authorization-implicit-consent"]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, "default-provider-invalidation-flow"]]
+      token_validity: hours=24
+
+  # ── Application ─────────────────────────────────────────────────────
+
+  - model: authentik_core.application
+    id: n8n-application
+    identifiers:
+      slug: n8n
+    attrs:
+      name: n8n
+      slug: n8n
+      provider: !KeyOf n8n-provider
+      meta_launch_url: https://n8n.localhost/
+      meta_description: "n8n workflow automation"
+      policy_engine_mode: any

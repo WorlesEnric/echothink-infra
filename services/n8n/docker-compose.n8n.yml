@@ -22,6 +22,7 @@ services:
       N8N_PROTOCOL: https
       WEBHOOK_URL: https://n8n.${DOMAIN}
       N8N_EDITOR_BASE_URL: https://n8n.${DOMAIN}
+      N8N_SECURE_COOKIE: "false"
 
       # Security
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
