@@ -18,11 +18,11 @@ up-all:
 
 # Stop core infrastructure
 down:
-	$(COMPOSE) $(CORE_FILES) down
+	$(COMPOSE) $(CORE_FILES) down --remove-orphans
 
 # Stop all services
 down-all:
-	$(COMPOSE) $(ALL_FILES) down
+	$(COMPOSE) $(ALL_FILES) down --remove-orphans
 
 # Restart all services (or a specific service: make restart s=postgres)
 restart:

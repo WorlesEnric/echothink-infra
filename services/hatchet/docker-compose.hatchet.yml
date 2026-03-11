@@ -63,6 +63,8 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://${HATCHET_DB_USER:-hatchet_user}:${HATCHET_DB_PASSWORD}@postgres:5432/hatchet?sslmode=disable
+      SERVER_AUTH_COOKIE_INSECURE: "true"
+      SERVER_URL: http://hatchet.${DOMAIN}
     depends_on:
       hatchet-setup:
         condition: service_completed_successfully

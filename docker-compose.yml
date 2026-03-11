@@ -57,10 +57,10 @@ services:
       DOMAIN: ${DOMAIN:-localhost}
     command: >
       /bin/sh -ec 'mkdir -p /tmp/nginx-conf.d;
-      envsubst "$$DOMAIN" < /etc/nginx/nginx.conf > /tmp/nginx.conf;
+      envsubst "\$$DOMAIN" < /etc/nginx/nginx.conf > /tmp/nginx.conf;
       sed -i "s#/etc/nginx/conf.d#/tmp/nginx-conf.d#g" /tmp/nginx.conf;
       for f in /etc/nginx/conf.d/*.conf; do
-        envsubst "$$DOMAIN" < "$$f" > "/tmp/nginx-conf.d/$$(basename "$$f")";
+        envsubst "\$$DOMAIN" < "$$f" > "/tmp/nginx-conf.d/$$(basename "$$f")";
       done;
       exec nginx -c /tmp/nginx.conf -g "daemon off;"'
     depends_on:
