@@ -112,22 +112,6 @@ GRANT ALL ON SCHEMA public TO n8n_user;
 
 \c postgres
 
--- authentik_user
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'authentik_user') THEN
-    CREATE ROLE authentik_user WITH LOGIN PASSWORD 'V6D8qjBsQk3EFv1pQqAZQrkS';
-  END IF;
-END $$;
-GRANT ALL PRIVILEGES ON DATABASE authentik TO authentik_user;
-ALTER DATABASE authentik OWNER TO authentik_user;
-
-\c authentik
-ALTER SCHEMA public OWNER TO authentik_user;
-GRANT ALL ON SCHEMA public TO authentik_user;
-
-\c postgres
-
 -- dify_user
 DO $$
 BEGIN

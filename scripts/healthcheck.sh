@@ -22,7 +22,6 @@ POSTGRES_CONTAINER="${ECHOTHINK_POSTGRES_CONTAINER:-echothink-postgres}"
 REDIS_CONTAINER="${ECHOTHINK_REDIS_CONTAINER:-echothink-redis}"
 NEO4J_CONTAINER="${ECHOTHINK_NEO4J_CONTAINER:-echothink-neo4j}"
 MINIO_CONTAINER="${ECHOTHINK_MINIO_CONTAINER:-echothink-minio}"
-AUTHENTIK_CONTAINER="${ECHOTHINK_AUTHENTIK_CONTAINER:-authentik-server}"
 CLICKHOUSE_CONTAINER="${ECHOTHINK_CLICKHOUSE_CONTAINER:-langfuse-clickhouse}"
 LANGFUSE_CONTAINER="${ECHOTHINK_LANGFUSE_CONTAINER:-langfuse-web}"
 LANGFUSE_WORKER_CONTAINER="${ECHOTHINK_LANGFUSE_WORKER_CONTAINER:-langfuse-worker}"
@@ -36,7 +35,7 @@ NGINX_CONTAINER="${ECHOTHINK_NGINX_CONTAINER:-echothink-nginx}"
 POSTGRES_USER="${POSTGRES_USER:-postgres}"
 
 # Databases that should exist in PostgreSQL
-DATABASES=(postgres authentik supabase _supabase dify hatchet langfuse litellm n8n outline gitlab)
+DATABASES=(postgres supabase _supabase dify hatchet langfuse litellm n8n outline gitlab)
 
 # MinIO buckets created by minio-init (alias: echothink)
 MINIO_BUCKETS=(supabase-storage dify-storage outline-data artifacts backups langfuse-events langfuse-media)
@@ -271,23 +270,8 @@ check_graphiti() {
 }
 
 # ---------------------------------------------------------------------------
-# Authentik
 # ---------------------------------------------------------------------------
 
-check_authentik() {
-    print_header "Authentik"
-
-    if ! check_container_running "$AUTHENTIK_CONTAINER"; then
-        print_fail "Authentik container is not running ($AUTHENTIK_CONTAINER)"
-        return
-    fi
-
-    if docker exec "$AUTHENTIK_CONTAINER" ak healthcheck > /dev/null 2>&1; then
-        print_ok "Authentik server is healthy"
-    else
-        print_fail "Authentik health check failed"
-    fi
-}
 
 # ---------------------------------------------------------------------------
 # Supabase
@@ -461,18 +445,18 @@ check_hatchet() {
         print_fail "Hatchet engine container is not running"
     fi
 
-    # Hatchet API
+    # Hatchet Dashboard
     local api_container
-    api_container=$(find_container "hatchet-api")
+    api_container=$(find_container "hatchet-dashboard")
 
     if [[ -n "$api_container" ]]; then
-        if docker exec "$api_container" wget --spider -q http://localhost:8080/api/ready 2>/dev/null; then
-            print_ok "Hatchet API is ready"
+        if docker exec "$api_container" wget --spider -q http://127.0.0.1/ 2>/dev/null; then
+            print_ok "Hatchet Dashboard is ready"
         else
-            print_fail "Hatchet API is not ready"
+            print_fail "Hatchet Dashboard is not ready"
         fi
     else
-        print_fail "Hatchet API container is not running"
+        print_fail "Hatchet Dashboard container is not running"
     fi
 }
 
@@ -614,7 +598,6 @@ main() {
     check_graphiti
 
     # Identity & access
-    check_authentik
 
     # Backend-as-a-service
     check_supabase

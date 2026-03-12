@@ -30,18 +30,6 @@ spec:
       secretName: {{ .Values.ingress.tls.secretName }}
   {{- end }}
   rules:
-    ## Authentik
-    - host: auth.{{ $domain }}
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ $fullname }}-authentik
-                port:
-                  name: http
-
     ## Supabase (Kong gateway)
     - host: supabase.{{ $domain }}
       http:

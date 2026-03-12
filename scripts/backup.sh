@@ -33,7 +33,7 @@ MINIO_CONTAINER="${ECHOTHINK_MINIO_CONTAINER:-echothink-minio}"
 POSTGRES_USER="${POSTGRES_USER:-postgres}"
 FALKORDB_PORT="${FALKORDB_PORT:-6380}"
 
-DATABASES=(postgres authentik supabase dify hatchet langfuse litellm n8n outline gitlab)
+DATABASES=(postgres supabase dify hatchet langfuse litellm n8n outline gitlab)
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 

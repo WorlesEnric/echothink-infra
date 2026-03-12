@@ -34,7 +34,6 @@ Langfuse 的核心功能围绕 Trace、Span 和 Generation 三个层级的追踪
 
 Langfuse 通过 MinIO 对象存储服务存储两类数据：事件数据和媒体文件。事件上传使用 `langfuse-events` 存储桶，当追踪事件的数据量较大或包含大段文本时，Langfuse 会将其存入 MinIO 而非直接写入数据库，避免数据库膨胀。媒体上传使用 `langfuse-media` 存储桶，存储与追踪关联的图片、音频等多媒体文件。两者都配置了 path-style 访问模式（`FORCE_PATH_STYLE: true`），与 EchoThink 中 MinIO 的统一访问方式保持一致。
 
-安全方面，Langfuse 配置了多层加密保护。`ENCRYPTION_KEY` 提供 256 位的 AES 加密密钥（64 位十六进制字符），用于加密存储在数据库中的敏感信息。`NEXTAUTH_SECRET` 用于签名和验证认证会话令牌。`SALT` 用于 API 密钥的哈希存储。此外 Langfuse 还集成了 Authentik OIDC 认证，配置了完整的 OAuth2 客户端参数，支持通过 EchoThink 的统一身份认证系统登录，并允许与本地账户自动关联（`AUTH_CUSTOM_ALLOW_ACCOUNT_LINKING: true`）。同时保留了用户名密码登录方式作为备选（`AUTH_DISABLE_USERNAME_PASSWORD: false`），确保在 SSO 服务不可用时仍能访问系统。
 
 ## 游戏开发场景中的应用
 
@@ -62,4 +61,3 @@ ClickHouse 数据库：`langfuse`
 Redis：`redis://redis:6379`
 事件存储桶：`langfuse-events`（MinIO）
 媒体存储桶：`langfuse-media`（MinIO）
-SSO 集成：Authentik OIDC（`https://auth.${DOMAIN}/application/o/langfuse/`）

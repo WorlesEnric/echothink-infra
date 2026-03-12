@@ -33,12 +33,10 @@ All backups should be stored on a separate volume or remote storage (S3-compatib
 
 ## PostgreSQL
 
-PostgreSQL is the single most critical component. It stores data for: Authentik, Dify, Hatchet, Langfuse, LiteLLM, n8n, Outline, Supabase, and GitLab.
 
 ### Databases to back up
 
 - `postgres` (shared, with pgvector extension)
-- `authentik`
 - `supabase`
 - `dify`
 - `hatchet`
@@ -55,14 +53,10 @@ PostgreSQL is the single most critical component. It stores data for: Authentik,
 docker exec echothink-postgres pg_dump \
   -U postgres \
   -Fc \
-  --file=/tmp/authentik_backup.dump \
-  authentik
 
 # Copy the dump out of the container
-docker cp echothink-postgres:/tmp/authentik_backup.dump ./backups/
 
 # Dump all databases at once
-for db in postgres authentik supabase dify hatchet langfuse litellm n8n outline gitlab; do
   docker exec echothink-postgres pg_dump \
     -U postgres \
     -Fc \
@@ -255,22 +249,16 @@ Use the provided backup script for a complete backup of all stateful services:
 
 ```bash
 # Restore a single database from custom-format dump
-docker cp ./backups/authentik.dump echothink-postgres:/tmp/authentik.dump
 
 # Drop and recreate the database (WARNING: destroys existing data)
-docker exec echothink-postgres psql -U postgres -c "DROP DATABASE IF EXISTS authentik;"
-docker exec echothink-postgres psql -U postgres -c "CREATE DATABASE authentik;"
 
 # Restore the dump
 docker exec echothink-postgres pg_restore \
   -U postgres \
-  -d authentik \
   --no-owner \
   --no-privileges \
-  /tmp/authentik.dump
 
 # Restore all databases
-for db in postgres authentik supabase dify hatchet langfuse litellm n8n outline gitlab; do
   if [ -f "./backups/${db}.dump" ]; then
     docker cp ./backups/${db}.dump echothink-postgres:/tmp/${db}.dump
     if [ "$db" != "postgres" ]; then
@@ -374,7 +362,6 @@ docker exec echothink-gitlab gitlab-rake gitlab:check SANITIZE=true
    tar -xzf echothink_backup_YYYYMMDD_HHMMSS.tar.gz -C /tmp/restore/
 
    # Restore each database
-   for db in postgres authentik supabase dify hatchet langfuse litellm n8n outline gitlab; do
      docker cp /tmp/restore/pg/${db}.dump echothink-postgres:/tmp/${db}.dump
      if [ "$db" != "postgres" ]; then
        docker exec echothink-postgres psql -U postgres -c "DROP DATABASE IF EXISTS ${db};"
@@ -406,7 +393,6 @@ docker exec echothink-gitlab gitlab-rake gitlab:check SANITIZE=true
    ./scripts/healthcheck.sh
    ```
 
-10. **Verify Authentik SSO** -- log into the admin panel and confirm providers are functional.
 
 11. **Verify Supabase Realtime** -- confirm WebSocket channels are accepting connections.
 

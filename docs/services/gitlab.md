@@ -20,8 +20,6 @@ GitLab 的内部 Nginx 被配置为仅监听 HTTP 协议（`nginx['listen_https'
 - 内部 SSH 端口：22（映射到宿主机 2222）
 - 外部访问：https://gitlab.${DOMAIN}（经 Nginx 反向代理）
 - `GITLAB_DB_PASSWORD`：PostgreSQL 数据库连接密码
-- `GITLAB_OAUTH_CLIENT_ID`：Authentik OIDC 客户端 ID
-- `GITLAB_OAUTH_CLIENT_SECRET`：Authentik OIDC 客户端密钥
 - `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`：MinIO 对象存储访问凭证
 
 ## 对象存储与容器镜像仓库
@@ -32,9 +30,7 @@ GitLab 同时配置了容器镜像仓库（Container Registry），通过 `https
 
 ## 统一身份认证集成
 
-GitLab 通过 OmniAuth 框架与 Authentik 实现了 OIDC 单点登录集成。配置中使用了条件判断逻辑——仅当 `GITLAB_OAUTH_CLIENT_ID` 和 `GITLAB_OAUTH_CLIENT_SECRET` 环境变量不为空时才启用 OmniAuth，这种设计保证了在 Authentik 尚未配置完成时 GitLab 仍能独立运行。启用后，GitLab 会自动允许通过 OIDC 进行单点登录，并自动从身份提供方同步用户的邮箱和个人资料信息。`omniauth_block_auto_created_users` 设为 false，意味着通过 Authentik 首次登录的用户会被自动创建 GitLab 账号，无需管理员手动审批。PKCE（Proof Key for Code Exchange）安全扩展已启用，为 OAuth 授权码流程增加了额外的安全层。
 
-这种统一认证的集成让团队成员使用同一套 EchoThink 账号即可无缝访问 GitLab 和平台内的其他所有服务，消除了多系统账号管理的负担。当新成员加入团队时，管理员只需在 Authentik 中创建一个账号，该成员即可自动获得所有平台服务的访问权限。
 
 ## 游戏开发场景中的应用价值
 

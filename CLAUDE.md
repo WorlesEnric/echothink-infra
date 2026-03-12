@@ -29,8 +29,6 @@ echothink-infra/
 │   ├── healthcheck.sh         # Service health verification script
 │   └── backup.sh              # Automated backup script
 └── services/
-    ├── authentik/
-    │   └── blueprints/        # Authentik flow and provider blueprints
     ├── dify/
     │   └── config/            # Dify configuration files
     ├── gitlab/                # GitLab EE configuration
@@ -60,7 +58,6 @@ echothink-infra/
 1. **Create the service directory**: `services/<service-name>/` with any config files.
 2. **Create or update the Docker Compose file**: Add the service definition to `docker-compose.yml` (or `docker-compose.<service-name>.yml` if using split compose files). Attach it to the `echothink` network. Define a named volume following the convention below.
 3. **Add Nginx configuration**: Create `services/nginx/conf.d/<service-name>.conf` with the reverse proxy block. Use the internal Docker DNS name as the upstream.
-4. **Add Authentik provider**: Create an OAuth2/OpenID provider in Authentik for the service. Add the corresponding application and assign it to an authorization flow. Store the client ID and secret as env vars.
 5. **Add environment variables**: Add all new env vars to `.env.example` with descriptive comments. Use the naming convention below.
 6. **Add Kubernetes manifests**: Create a template directory under `k8s/helm/echothink/templates/<service-name>/` with Deployment, Service, ConfigMap, and optionally Ingress manifests. Add kustomize patches if needed.
 7. **Update healthcheck script**: Add a health check entry to `scripts/healthcheck.sh`.
@@ -77,10 +74,8 @@ echothink-infra/
 - Database credentials: `<SERVICE>_DB_HOST`, `<SERVICE>_DB_PORT`, `<SERVICE>_DB_NAME`, `<SERVICE>_DB_USER`, `<SERVICE>_DB_PASSWORD`
 - URLs: `<SERVICE>_URL`, `<SERVICE>_PUBLIC_URL`
 - Secrets: `<SERVICE>_SECRET_KEY`, `<SERVICE>_API_KEY`
-- Examples: `AUTHENTIK_SECRET_KEY`, `LITELLM_DB_NAME`, `MINIO_ROOT_USER`
 
 ### Database Names
-- One database per service, named after the service: `authentik`, `dify`, `hatchet`, `langfuse`, `n8n`, `outline`, `supabase`, `litellm`, `gitlab`
 - All databases live in the shared PostgreSQL 16 instance (with pgvector)
 - Init scripts in `services/postgres/init/` create databases and extensions
 
@@ -145,7 +140,6 @@ make build SERVICE=postgres
 make migrate
 
 # Open a psql shell
-make psql DB=authentik
 ```
 
 ## Key File Locations
@@ -159,7 +153,6 @@ make psql DB=authentik
 | PostgreSQL init SQL | `services/postgres/init/00-extensions.sql` |
 | Nginx site configs | `services/nginx/conf.d/` |
 | TLS certificates | `services/nginx/ssl/` |
-| Authentik blueprints | `services/authentik/blueprints/` |
 | Supabase migrations | `services/supabase/migrations/` |
 | Helm chart | `k8s/helm/echothink/` |
 | Kustomize overlays | `k8s/kustomize/overlays/` |
@@ -188,7 +181,6 @@ make psql DB=authentik
    curl -s -o /dev/null -w "%{http_code}" https://minio.echothink.local/
    ```
 
-4. **Verify Authentik SSO** -- log into Authentik admin and confirm all providers and applications are listed.
 
 5. **Verify Supabase Realtime** -- use the Supabase Studio dashboard to confirm Realtime channels are active.
 

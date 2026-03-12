@@ -4,7 +4,6 @@
 
 include:
   - services/supabase/docker-compose.supabase.yml
-  - services/authentik/docker-compose.authentik.yml
   - services/litellm/docker-compose.litellm.yml
   - services/dify/docker-compose.dify.yml
   - services/hatchet/docker-compose.hatchet.yml

@@ -111,7 +111,6 @@ Before moving to Redis Cluster, split workloads across separate Redis instances:
 
 | Instance | Purpose | Services |
 |----------|---------|----------|
-| `redis-cache` | Caching, sessions | Authentik, Supabase, Outline |
 | `redis-queue` | Celery broker | Dify workers |
 | `redis-ratelimit` | Rate limiting | LiteLLM, API gateway |
 

@@ -8,16 +8,6 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: auth.echothink.local
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: authentik
-                port:
-                  name: http
     - host: litellm.echothink.local
       http:
         paths:

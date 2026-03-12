@@ -91,77 +91,72 @@ info "Generating passwords and secrets..."
 GENERATED=0
 
 # PostgreSQL passwords
-if set_env "POSTGRES_PASSWORD" "$(gen_password 32)"; then ((GENERATED++)); fi
-if set_env "SUPABASE_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)); fi
-if set_env "SUPABASE_DASHBOARD_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)); fi
-if set_env "REDIS_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)); fi
-if set_env "SUPABASE_LOGFLARE_PUBLIC_ACCESS_TOKEN" "$(gen_password 32)"; then ((GENERATED++)); fi
-if set_env "SUPABASE_LOGFLARE_PRIVATE_ACCESS_TOKEN" "$(gen_password 32)"; then ((GENERATED++)); fi
-if set_env "HATCHET_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)); fi
-if set_env "LANGFUSE_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)); fi
-if set_env "N8N_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)); fi
-if set_env "AUTHENTIK_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)); fi
-if set_env "DIFY_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)); fi
-if set_env "OUTLINE_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)); fi
-if set_env "LITELLM_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)); fi
-if set_env "GITLAB_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)); fi
+if set_env "POSTGRES_PASSWORD" "$(gen_password 32)"; then ((GENERATED++)) || true; fi
+if set_env "SUPABASE_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)) || true; fi
+if set_env "SUPABASE_DASHBOARD_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)) || true; fi
+if set_env "REDIS_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)) || true; fi
+if set_env "SUPABASE_LOGFLARE_PUBLIC_ACCESS_TOKEN" "$(gen_password 32)"; then ((GENERATED++)) || true; fi
+if set_env "SUPABASE_LOGFLARE_PRIVATE_ACCESS_TOKEN" "$(gen_password 32)"; then ((GENERATED++)) || true; fi
+if set_env "HATCHET_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)) || true; fi
+if set_env "LANGFUSE_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)) || true; fi
+if set_env "N8N_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)) || true; fi
+if set_env "DIFY_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)) || true; fi
+if set_env "OUTLINE_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)) || true; fi
+if set_env "LITELLM_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)) || true; fi
+if set_env "GITLAB_DB_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)) || true; fi
 
 # MinIO
-if set_env "MINIO_ROOT_PASSWORD" "$(gen_password 32)"; then ((GENERATED++)); fi
+if set_env "MINIO_ROOT_PASSWORD" "$(gen_password 32)"; then ((GENERATED++)) || true; fi
 
 # Supabase JWT
 JWT_SECRET="$(gen_secret 32)"
 if set_env "SUPABASE_JWT_SECRET" "$JWT_SECRET"; then
-    ((GENERATED++))
+    ((GENERATED++)) || true
     # Generate JWT tokens using the new secret
     ANON_KEY=$(gen_jwt "anon" "$JWT_SECRET")
     SERVICE_ROLE_KEY=$(gen_jwt "service_role" "$JWT_SECRET")
-    set_env "SUPABASE_ANON_KEY" "$ANON_KEY" && ((GENERATED++))
-    set_env "SUPABASE_SERVICE_ROLE_KEY" "$SERVICE_ROLE_KEY" && ((GENERATED++))
+    set_env "SUPABASE_ANON_KEY" "$ANON_KEY" && ((GENERATED++)) || true
+    set_env "SUPABASE_SERVICE_ROLE_KEY" "$SERVICE_ROLE_KEY" && ((GENERATED++)) || true
     ok "Generated Supabase JWT tokens"
 else
     # If JWT secret already set, read it for potential token regeneration
     JWT_SECRET=$(grep "^SUPABASE_JWT_SECRET=" "$PROJECT_DIR/.env" | cut -d= -f2)
-    if set_env "SUPABASE_ANON_KEY" "$(gen_jwt "anon" "$JWT_SECRET")"; then ((GENERATED++)); fi
-    if set_env "SUPABASE_SERVICE_ROLE_KEY" "$(gen_jwt "service_role" "$JWT_SECRET")"; then ((GENERATED++)); fi
+    if set_env "SUPABASE_ANON_KEY" "$(gen_jwt "anon" "$JWT_SECRET")"; then ((GENERATED++)) || true; fi
+    if set_env "SUPABASE_SERVICE_ROLE_KEY" "$(gen_jwt "service_role" "$JWT_SECRET")"; then ((GENERATED++)) || true; fi
 fi
 
-if set_env "SUPABASE_REALTIME_SECRET_KEY_BASE" "$(gen_secret 32)"; then ((GENERATED++)); fi
+if set_env "SUPABASE_REALTIME_SECRET_KEY_BASE" "$(gen_secret 32)"; then ((GENERATED++)) || true; fi
 
-# Authentik
-if set_env "AUTHENTIK_SECRET_KEY" "$(gen_secret 32)"; then ((GENERATED++)); fi
-if set_env "AUTHENTIK_BOOTSTRAP_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)); fi
-if set_env "AUTHENTIK_BOOTSTRAP_TOKEN" "$(gen_secret 32)"; then ((GENERATED++)); fi
 
 # LiteLLM
-if set_env "LITELLM_MASTER_KEY" "sk-$(gen_secret 24)"; then ((GENERATED++)); fi
+if set_env "LITELLM_MASTER_KEY" "sk-$(gen_secret 24)"; then ((GENERATED++)) || true; fi
 
 # Langfuse
-if set_env "LANGFUSE_SECRET_KEY" "$(gen_secret 32)"; then ((GENERATED++)); fi
-if set_env "LANGFUSE_NEXT_AUTH_SECRET" "$(gen_secret 32)"; then ((GENERATED++)); fi
-if set_env "LANGFUSE_SALT" "$(gen_secret 16)"; then ((GENERATED++)); fi
+if set_env "LANGFUSE_SECRET_KEY" "$(gen_secret 32)"; then ((GENERATED++)) || true; fi
+if set_env "LANGFUSE_NEXT_AUTH_SECRET" "$(gen_secret 32)"; then ((GENERATED++)) || true; fi
+if set_env "LANGFUSE_SALT" "$(gen_secret 16)"; then ((GENERATED++)) || true; fi
 
 # n8n
-if set_env "N8N_ENCRYPTION_KEY" "$(gen_secret 24)"; then ((GENERATED++)); fi
+if set_env "N8N_ENCRYPTION_KEY" "$(gen_secret 24)"; then ((GENERATED++)) || true; fi
 
 # Dify
-if set_env "DIFY_SECRET_KEY" "$(gen_secret 32)"; then ((GENERATED++)); fi
+if set_env "DIFY_SECRET_KEY" "$(gen_secret 32)"; then ((GENERATED++)) || true; fi
 
 # Outline
-if set_env "OUTLINE_SECRET_KEY" "$(gen_secret 32)"; then ((GENERATED++)); fi
-if set_env "OUTLINE_UTILS_SECRET" "$(gen_secret 32)"; then ((GENERATED++)); fi
+if set_env "OUTLINE_SECRET_KEY" "$(gen_secret 32)"; then ((GENERATED++)) || true; fi
+if set_env "OUTLINE_UTILS_SECRET" "$(gen_secret 32)"; then ((GENERATED++)) || true; fi
 
 # GitLab
-if set_env "GITLAB_ROOT_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)); fi
-if set_env "GITLAB_SHARED_RUNNERS_TOKEN" "$(gen_secret 20)"; then ((GENERATED++)); fi
+if set_env "GITLAB_ROOT_PASSWORD" "$(gen_password 24)"; then ((GENERATED++)) || true; fi
+if set_env "GITLAB_SHARED_RUNNERS_TOKEN" "$(gen_secret 20)"; then ((GENERATED++)) || true; fi
 
 # Hatchet
-if set_env "HATCHET_CLIENT_TOKEN" "$(gen_secret 32)"; then ((GENERATED++)); fi
-if set_env "HATCHET_JWT_SECRET" "$(gen_secret 32)"; then ((GENERATED++)); fi
-if set_env "HATCHET_AUTH_COOKIE_SECRETS" "$(gen_secret 32) $(gen_secret 32)"; then ((GENERATED++)); fi
-if set_env "HATCHET_ENCRYPTION_MASTER_KEYSET" "$(gen_secret 64)"; then ((GENERATED++)); fi
-if set_env "HATCHET_ENCRYPTION_JWT_PRIVATE_KEYSET" "$(gen_secret 64)"; then ((GENERATED++)); fi
-if set_env "HATCHET_ENCRYPTION_JWT_PUBLIC_KEYSET" "$(gen_secret 64)"; then ((GENERATED++)); fi
+if set_env "HATCHET_CLIENT_TOKEN" "$(gen_secret 32)"; then ((GENERATED++)) || true; fi
+if set_env "HATCHET_JWT_SECRET" "$(gen_secret 32)"; then ((GENERATED++)) || true; fi
+if set_env "HATCHET_AUTH_COOKIE_SECRETS" "$(gen_secret 32) $(gen_secret 32)"; then ((GENERATED++)) || true; fi
+if set_env "HATCHET_ENCRYPTION_MASTER_KEYSET" "$(gen_secret 64)"; then ((GENERATED++)) || true; fi
+if set_env "HATCHET_ENCRYPTION_JWT_PRIVATE_KEYSET" "$(gen_secret 64)"; then ((GENERATED++)) || true; fi
+if set_env "HATCHET_ENCRYPTION_JWT_PUBLIC_KEYSET" "$(gen_secret 64)"; then ((GENERATED++)) || true; fi
 
 ok "Generated $GENERATED secrets/passwords"
 
@@ -177,7 +172,6 @@ if [ -f "$ROLES_FILE" ]; then
     HATCHET_DB_PW=$(grep "^HATCHET_DB_PASSWORD=" "$PROJECT_DIR/.env" | cut -d= -f2)
     LANGFUSE_DB_PW=$(grep "^LANGFUSE_DB_PASSWORD=" "$PROJECT_DIR/.env" | cut -d= -f2)
     N8N_DB_PW=$(grep "^N8N_DB_PASSWORD=" "$PROJECT_DIR/.env" | cut -d= -f2)
-    AUTHENTIK_DB_PW=$(grep "^AUTHENTIK_DB_PASSWORD=" "$PROJECT_DIR/.env" | cut -d= -f2)
     DIFY_DB_PW=$(grep "^DIFY_DB_PASSWORD=" "$PROJECT_DIR/.env" | cut -d= -f2)
     OUTLINE_DB_PW=$(grep "^OUTLINE_DB_PASSWORD=" "$PROJECT_DIR/.env" | cut -d= -f2)
     LITELLM_DB_PW=$(grep "^LITELLM_DB_PASSWORD=" "$PROJECT_DIR/.env" | cut -d= -f2)
@@ -188,7 +182,6 @@ if [ -f "$ROLES_FILE" ]; then
         -e "s|HATCHET_DB_PASSWORD_PLACEHOLDER|${HATCHET_DB_PW}|g" \
         -e "s|LANGFUSE_DB_PASSWORD_PLACEHOLDER|${LANGFUSE_DB_PW}|g" \
         -e "s|N8N_DB_PASSWORD_PLACEHOLDER|${N8N_DB_PW}|g" \
-        -e "s|AUTHENTIK_DB_PASSWORD_PLACEHOLDER|${AUTHENTIK_DB_PW}|g" \
         -e "s|DIFY_DB_PASSWORD_PLACEHOLDER|${DIFY_DB_PW}|g" \
         -e "s|OUTLINE_DB_PASSWORD_PLACEHOLDER|${OUTLINE_DB_PW}|g" \
         -e "s|LITELLM_DB_PASSWORD_PLACEHOLDER|${LITELLM_DB_PW}|g" \

@@ -27,10 +27,10 @@ services:
       OPENAI_API_BASE: http://litellm:4000/v1
       OPENAI_API_KEY: ${LITELLM_MASTER_KEY}
       SECRET_KEY: ${DIFY_SECRET_KEY}
-      CONSOLE_WEB_URL: http://dify.${DOMAIN}
-      CONSOLE_API_URL: http://dify.${DOMAIN}
-      SERVICE_API_URL: http://dify-api.${DOMAIN}
-      APP_WEB_URL: http://dify.${DOMAIN}
+      CONSOLE_WEB_URL: ${DIFY_PUBLIC_URL:-http://dify.${DOMAIN}}
+      CONSOLE_API_URL: ${DIFY_PUBLIC_URL:-http://dify.${DOMAIN}}
+      SERVICE_API_URL: ${DIFY_PUBLIC_URL:-http://dify.${DOMAIN}}
+      APP_WEB_URL: ${DIFY_PUBLIC_URL:-http://dify.${DOMAIN}}
       CODE_EXECUTION_ENDPOINT: http://dify-sandbox:8194
       CODE_MAX_NUMBER: "9999999999999"
       CODE_MIN_NUMBER: "-9999999999999"
@@ -59,8 +59,8 @@ services:
     restart: unless-stopped
     environment:
       HOSTNAME: "0.0.0.0"
-      CONSOLE_API_URL: http://dify.${DOMAIN}
-      APP_API_URL: http://dify.${DOMAIN}
+      CONSOLE_API_URL: ${DIFY_PUBLIC_URL:-http://dify.${DOMAIN}}
+      APP_API_URL: ${DIFY_PUBLIC_URL:-http://dify.${DOMAIN}}
       SENTRY_DSN: ""
     depends_on:
       - dify-api

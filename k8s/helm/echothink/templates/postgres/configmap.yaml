@@ -41,7 +41,6 @@ data:
     CREATE EXTENSION IF NOT EXISTS btree_gin;
     CREATE EXTENSION IF NOT EXISTS uuid-ossp;
   02-databases.sql: |
-    CREATE DATABASE authentik;
     CREATE DATABASE supabase;
     CREATE DATABASE dify;
     CREATE DATABASE hatchet;

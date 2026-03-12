@@ -16,7 +16,6 @@ CORS 插件在全局范围内启用，允许所有来源的跨域请求，支持
 
 ## GoTrue — 用户认证引擎
 
-GoTrue（版本 v2.186.0）是 Supabase 的认证引擎，在 EchoThink 中运行于 9999 端口。它直接连接到共享的 PostgreSQL 数据库（数据库 `supabase`，schema 为 `auth`），并使用 Supabase JWT Secret 签发和验证 JSON Web Token。GoTrue 被配置为与 Authentik 进行 OIDC 集成——通过 `GOTRUE_EXTERNAL_AUTHENTIK_*` 系列环境变量指向 Authentik Server 上的 Supabase OAuth2 应用端点，这意味着用户可以使用 EchoThink 统一身份登录 Supabase 相关的应用。GoTrue 将邮件和短信的自动确认都设为了 true，省去了在内部部署环境中配置邮件服务器的复杂性。请求速率限制通过 `X-Forwarded-For` 头识别客户端，邮件发送限制设为每小时 100 封，为通知密集型的协作场景留足了余量。
 
 ## PostgREST — 自动生成的 REST API
 

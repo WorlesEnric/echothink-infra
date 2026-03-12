@@ -74,11 +74,7 @@ minio:
     - name: langfuse-media
 
 # ---------------------------------------------------------------------------
-# Authentik
 # ---------------------------------------------------------------------------
-authentik:
-  image: ghcr.io/goauthentik/server:latest
-  replicas: 1
   resources:
     requests:
       cpu: 250m

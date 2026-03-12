@@ -8,7 +8,6 @@ resources:
   - postgres.yaml
   - redis.yaml
   - minio.yaml
-  - authentik.yaml
   - litellm.yaml
   - dify.yaml
   - ingress.yaml
